@@ -1,0 +1,158 @@
+# Costume Rental Billing System - Git Ignore File
+
+# ============================================================================
+# BACKEND (Spring Boot / Java)
+# ============================================================================
+
+# Compiled class files
+backend/target/
+backend/*.jar
+backend/*.war
+backend/*.ear
+backend/*.class
+
+# Maven
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+
+# IDE files
+backend/.idea/
+backend/*.iml
+backend/.vscode/
+backend/.settings/
+backend/.project
+backend/.classpath
+
+# Spring Boot
+backend/application-*.properties
+backend/application-*.yml
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+costume_rental.db
+
+# Logs
+backend/logs/
+backend/*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============================================================================
+# FRONTEND (Angular)
+# ============================================================================
+
+# Node modules
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Build outputs
+frontend/dist/
+frontend/tmp/
+frontend/out-tsc/
+
+# Angular cache
+frontend/.angular/cache/
+
+# IDE files
+frontend/.vscode/
+frontend/.idea/
+frontend/*.sublime-workspace
+frontend/*.sublime-project
+
+# Environment files
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Coverage directory used by tools like istanbul
+frontend/coverage/
+
+# Dependency directories
+frontend/node_modules/
+frontend/jspm_packages/
+
+# Optional npm cache directory
+frontend/.npm
+
+# Optional eslint cache
+frontend/.eslintcache
+
+# Angular CLI cache
+frontend/.angular/
+
+# System Files
+frontend/.DS_Store
+frontend/Thumbs.db
+
+# ============================================================================
+# GENERAL
+# ============================================================================
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# IDE and editor files
+.idea/
+.vscode/
+*.sublime-*
+*.code-workspace
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Documentation build
+docs/_build/
+
+# ============================================================================
+# SPECIFIC TO THIS PROJECT
+# ============================================================================
+
+# Generated database files
+costume_rental.db*
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Generated script files
+database-updates.sql
+quick-update.sql
+database-schema.sql
+
+# Local environment configurations
+local.properties
+local.yml
