@@ -80,7 +80,6 @@ public class CostumeController {
     public ResponseEntity<Costume> updateCostume(@PathVariable Long id, 
                                                @Valid @RequestBody Costume costumeDetails) {
         Optional<Costume> optionalCostume = costumeRepository.findById(id);
-        
         if (optionalCostume.isPresent()) {
             Costume costume = optionalCostume.get();
             costume.setName(costumeDetails.getName());
