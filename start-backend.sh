@@ -1,6 +1,7 @@
 #!/bin/bash
 
 echo "Starting Costume Rental Billing System - Backend"
+echo "IMPORTANT: Make sure PostgreSQL is running (docker-compose up -d)"
 echo
 
 cd backend

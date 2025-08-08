@@ -93,7 +93,7 @@ import { Bill, BillStatus, PaymentMethod } from '../../models/bill.model';
             <ng-container matColumnDef="customer">
               <th mat-header-cell *matHeaderCellDef>Customer</th>
               <td mat-cell *matCellDef="let bill">
-                {{ bill.rental.customer.firstName }} {{ bill.rental.customer.lastName }}
+                {{ bill.rental.customer.firstName }}
               </td>
             </ng-container>
 

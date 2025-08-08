@@ -26,20 +26,20 @@ public class DatabaseHealthIndicator implements HealthIndicator {
                 
                 if (resultSet.next() && resultSet.getInt(1) == 1) {
                     return Health.up()
-                            .withDetail("database", "SQLite")
+                            .withDetail("database", "PostgreSQL")
                             .withDetail("status", "Connected")
                             .build();
                 }
             }
         } catch (Exception e) {
             return Health.down()
-                    .withDetail("database", "SQLite")
+                    .withDetail("database", "PostgreSQL")
                     .withDetail("error", e.getMessage())
                     .build();
         }
         
         return Health.down()
-                .withDetail("database", "SQLite")
+                .withDetail("database", "PostgreSQL")
                 .withDetail("error", "Unknown database error")
                 .build();
     }

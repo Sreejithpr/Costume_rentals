@@ -91,11 +91,7 @@ import { Rental } from '../../models/rental.model';
                   <input matInput formControlName="firstName" required>
                   <mat-icon matSuffix>person</mat-icon>
                 </mat-form-field>
-                <mat-form-field appearance="outline" class="form-field">
-                  <mat-label>Last Name</mat-label>
-                  <input matInput formControlName="lastName" required>
-                  <mat-icon matSuffix>badge</mat-icon>
-                </mat-form-field>
+
               </div>
               
               <div class="form-row">
@@ -118,11 +114,12 @@ import { Rental } from '../../models/rental.model';
               </mat-form-field>
               
               <div class="form-actions">
-                <button mat-raised-button color="primary" type="submit" [disabled]="!customerForm.valid" class="submit-btn">
-                  <mat-icon>add</mat-icon>
-                  Add Customer
+                <button mat-raised-button color="primary" type="submit" [disabled]="!customerForm.valid || loading" class="submit-btn">
+                  <mat-spinner diameter="16" *ngIf="loading"></mat-spinner>
+                  <mat-icon *ngIf="!loading">add</mat-icon>
+                  {{ loading ? 'Adding...' : 'Add Customer' }}
                 </button>
-                <button mat-stroked-button type="button" (click)="cancelAdd()" class="cancel-btn">
+                <button mat-stroked-button type="button" (click)="cancelAdd()" [disabled]="loading" class="cancel-btn">
                   <mat-icon>close</mat-icon>
                   Cancel
                 </button>
@@ -144,7 +141,7 @@ import { Rental } from '../../models/rental.model';
             <ng-container matColumnDef="name">
               <th mat-header-cell *matHeaderCellDef>Name</th>
               <td mat-cell *matCellDef="let customer">
-                {{ customer.firstName }} {{ customer.lastName }}
+                {{ customer.firstName }}
               </td>
             </ng-container>
 
@@ -198,7 +195,7 @@ import { Rental } from '../../models/rental.model';
               <mat-icon>person</mat-icon>
             </div>
             <div class="customer-info">
-              <h2 class="customer-name">{{ selectedCustomerForRentals.firstName }} {{ selectedCustomerForRentals.lastName }}</h2>
+              <h2 class="customer-name">{{ selectedCustomerForRentals.firstName }}</h2>
               <p class="customer-details">{{ selectedCustomerForRentals.phone }} • {{ selectedCustomerForRentals.email }}</p>
             </div>
             <button mat-icon-button (click)="closeRentalHistory()" class="close-btn">
@@ -271,8 +268,8 @@ import { Rental } from '../../models/rental.model';
               </ng-container>
 
               <ng-container matColumnDef="price">
-                <th mat-header-cell *matHeaderCellDef>Daily Price</th>
-                <td mat-cell *matCellDef="let rental">₹{{ rental.costume.dailyRentalPrice }}</td>
+                <th mat-header-cell *matHeaderCellDef>Sell Price</th>
+                <td mat-cell *matCellDef="let rental">₹{{ rental.costume.sellPrice }}</td>
               </ng-container>
 
               <tr mat-header-row *matHeaderRowDef="rentalColumns"></tr>
@@ -647,7 +644,6 @@ export class CustomersComponent implements OnInit {
   ) {
     this.customerForm = this.fb.group({
       firstName: ['', Validators.required],
-      lastName: ['', Validators.required],
       email: ['', [Validators.email]],
       phone: [''],
       address: ['']
@@ -695,16 +691,20 @@ export class CustomersComponent implements OnInit {
 
   addCustomer() {
     if (this.customerForm.valid) {
+      this.loading = true;
       const customer: Customer = this.customerForm.value;
       this.customerService.createCustomer(customer).subscribe({
         next: (newCustomer) => {
           this.customers.push(newCustomer);
           this.customerForm.reset();
           this.showAddForm = false;
+          this.loading = false;
           this.snackBar.open('Customer added successfully', 'Close', { duration: 3000 });
         },
         error: (error) => {
           console.error('Error adding customer:', error);
+          this.loading = false;
+          this.showAddForm = false; // Close form even on error
           this.snackBar.open('Error adding customer', 'Close', { duration: 3000 });
         }
       });
@@ -734,6 +734,7 @@ export class CustomersComponent implements OnInit {
   cancelAdd() {
     this.showAddForm = false;
     this.customerForm.reset();
+    this.loading = false; // Ensure loading state is reset
   }
 
   // Rental history methods
@@ -776,12 +777,12 @@ export class CustomersComponent implements OnInit {
     return this.customerRentals.reduce((total, rental) => {
       if (rental.actualReturnDate && rental.rentalDate) {
         const rentalDays = Math.ceil((new Date(rental.actualReturnDate).getTime() - new Date(rental.rentalDate).getTime()) / (1000 * 60 * 60 * 24));
-        return total + (rental.costume.dailyRentalPrice * Math.max(1, rentalDays));
+        return total + (rental.costume.sellPrice * Math.max(1, rentalDays));
       } else if (!rental.actualReturnDate && rental.rentalDate && rental.expectedReturnDate) {
         const expectedDays = Math.ceil((new Date(rental.expectedReturnDate).getTime() - new Date(rental.rentalDate).getTime()) / (1000 * 60 * 60 * 24));
-        return total + (rental.costume.dailyRentalPrice * Math.max(1, expectedDays));
+        return total + (rental.costume.sellPrice * Math.max(1, expectedDays));
       }
-      return total + rental.costume.dailyRentalPrice; // Default to one day
+      return total + rental.costume.sellPrice; // Default to one day
     }, 0);
   }
 }

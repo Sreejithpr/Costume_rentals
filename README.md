@@ -34,6 +34,20 @@ A comprehensive billing system for costume rental shops built with Spring Boot (
 - Node.js 16+ and npm
 - Maven 3.6+
 - Angular CLI 17+
+- PostgreSQL 12+ (or Docker for containerized setup)
+- Docker and Docker Compose (recommended for easy PostgreSQL setup)
+
+### Database Setup (PostgreSQL)
+
+1. Start PostgreSQL using Docker (recommended):
+   ```bash
+   docker-compose up -d
+   ```
+
+2. Or install PostgreSQL locally and run the setup script:
+   ```bash
+   psql -U postgres -f backend/setup-database.sql
+   ```
 
 ### Backend Setup
 
@@ -47,6 +61,8 @@ A comprehensive billing system for costume rental shops built with Spring Boot (
    mvn clean install
    mvn spring-boot:run
    ```
+
+   The backend will connect to PostgreSQL automatically.
 
 3. The backend server will start on `http://localhost:8080`
 

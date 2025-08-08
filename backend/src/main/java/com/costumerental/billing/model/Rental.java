@@ -1,5 +1,6 @@
 package com.costumerental.billing.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 
@@ -10,16 +11,16 @@ import java.time.LocalDate;
 public class Rental {
     
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
     @NotNull(message = "Customer is required")
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
     
     @NotNull(message = "Costume is required")
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "costume_id", nullable = false)
     private Costume costume;
     
@@ -42,6 +43,7 @@ public class Rental {
     private String notes;
     
     @OneToOne(mappedBy = "rental", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private Bill bill;
     
     // Constructors

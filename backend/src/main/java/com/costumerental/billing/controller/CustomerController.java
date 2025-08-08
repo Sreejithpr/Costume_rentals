@@ -54,7 +54,6 @@ public class CustomerController {
         if (optionalCustomer.isPresent()) {
             Customer customer = optionalCustomer.get();
             customer.setFirstName(customerDetails.getFirstName());
-            customer.setLastName(customerDetails.getLastName());
             customer.setEmail(customerDetails.getEmail());
             customer.setPhone(customerDetails.getPhone());
             customer.setAddress(customerDetails.getAddress());

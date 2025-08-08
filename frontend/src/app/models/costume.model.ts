@@ -4,7 +4,8 @@ export interface Costume {
   description?: string;
   size: string;
   category: string;
-  dailyRentalPrice: number;
+  sellPrice: number;
+  originalPrice: number;
   available?: boolean;
   stockQuantity?: number;
   availableStock?: number;

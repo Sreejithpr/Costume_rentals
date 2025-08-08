@@ -86,9 +86,10 @@ public class CostumeController {
             costume.setDescription(costumeDetails.getDescription());
             costume.setSize(costumeDetails.getSize());
             costume.setCategory(costumeDetails.getCategory());
-            costume.setDailyRentalPrice(costumeDetails.getDailyRentalPrice());
+            costume.setSellPrice(costumeDetails.getSellPrice());
             costume.setAvailable(costumeDetails.getAvailable());
             costume.setStockQuantity(costumeDetails.getStockQuantity());
+            costume.setOriginalPrice(costumeDetails.getOriginalPrice());
             Costume updatedCostume = costumeRepository.save(costume);
             return ResponseEntity.ok(updatedCostume);
         } else {

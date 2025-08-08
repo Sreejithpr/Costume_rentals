@@ -16,10 +16,9 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     
     @Query("SELECT c FROM Customer c WHERE " +
            "LOWER(c.firstName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-           "LOWER(c.lastName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-           "LOWER(c.email) LIKE LOWER(CONCAT('%', :searchTerm, '%'))")
+           "LOWER(c.email) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(c.phone) LIKE LOWER(CONCAT('%', :searchTerm, '%'))")
     List<Customer> findBySearchTerm(@Param("searchTerm") String searchTerm);
     
-    List<Customer> findByFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCase(
-            String firstName, String lastName);
+    List<Customer> findByFirstNameContainingIgnoreCase(String firstName);
 }

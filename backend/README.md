@@ -216,7 +216,7 @@ curl http://localhost:8080/api/customers
 # Create a customer
 curl -X POST http://localhost:8080/api/customers \
   -H "Content-Type: application/json" \
-  -d '{"firstName":"John","lastName":"Doe","email":"john@example.com"}'
+  -d '{"firstName":"John Doe","email":"john@example.com"}'
 ```
 
 ## 🔧 Development
@@ -295,16 +295,17 @@ The API uses standard HTTP status codes:
    - Change port in `application.properties`
    - Kill process using the port: `lsof -ti:8080 | xargs kill`
 
-4. **SQLite dialect issues:**
-   - Ensure `hibernate-community-dialects` dependency is included
-   - Verify dialect configuration in properties
+4. **PostgreSQL connection issues:**
+   - Ensure PostgreSQL service is running
+   - Verify database credentials and connection URL
+   - Check if database and user exist (run setup-database.sql)
 
 ### Reset Database
-Delete `costume_rental.db` file and restart the application to reset all data.
+Connect to PostgreSQL and drop/recreate the `costume_rental` database, or run the setup-database.sql script.
 
 ## 📝 Notes
 
-- The application uses SQLite for simplicity and portability
+- The application uses PostgreSQL for production-ready data persistence
 - Bills are automatically generated when costumes are returned
 - Late fees are calculated at 50% of daily rental rate per day
 - The system prevents double-booking of costumes automatically

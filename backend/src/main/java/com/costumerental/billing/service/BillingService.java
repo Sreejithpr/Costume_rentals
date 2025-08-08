@@ -38,7 +38,7 @@ public class BillingService {
         long rentalDays = ChronoUnit.DAYS.between(rental.getRentalDate(), endDate) + 1;
         
         // Calculate base amount
-        BigDecimal baseAmount = rental.getCostume().getDailyRentalPrice()
+        BigDecimal baseAmount = rental.getCostume().getSellPrice()
                                .multiply(BigDecimal.valueOf(rentalDays));
         
         // Calculate late fee if returned late
@@ -47,9 +47,9 @@ public class BillingService {
             rental.getActualReturnDate().isAfter(rental.getExpectedReturnDate())) {
             long lateDays = ChronoUnit.DAYS.between(rental.getExpectedReturnDate(), 
                                                    rental.getActualReturnDate());
-            lateFee = rental.getCostume().getDailyRentalPrice()
+            lateFee = rental.getCostume().getSellPrice()
                      .multiply(BigDecimal.valueOf(lateDays))
-                     .multiply(BigDecimal.valueOf(0.5)); // 50% of daily rate as late fee
+                     .multiply(BigDecimal.valueOf(0.5)); // 50% of sell price as late fee
         }
         
         // Create bill

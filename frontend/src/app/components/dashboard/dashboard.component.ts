@@ -133,7 +133,7 @@ import { Bill } from '../../models/bill.model';
                 <mat-icon>person</mat-icon>
               </div>
               <div class="activity-details">
-                <div class="activity-title">{{ rental.customer.firstName }} {{ rental.customer.lastName }}</div>
+                <div class="activity-title">{{ rental.customer.firstName }}</div>
                 <div class="activity-subtitle">rented {{ rental.costume.name }}</div>
                 <div class="activity-time">{{ rental.rentalDate | date:'MMM dd, yyyy' }}</div>
               </div>
@@ -163,7 +163,7 @@ import { Bill } from '../../models/bill.model';
                 <mat-icon>receipt</mat-icon>
               </div>
               <div class="activity-details">
-                <div class="activity-title">{{ bill.rental.customer.firstName }} {{ bill.rental.customer.lastName }}</div>
+                <div class="activity-title">{{ bill.rental.customer.firstName }}</div>
                 <div class="activity-subtitle">{{ bill.rental.costume.name }}</div>
                 <div class="activity-time">Due: {{ bill.dueDate | date:'MMM dd' }}</div>
               </div>

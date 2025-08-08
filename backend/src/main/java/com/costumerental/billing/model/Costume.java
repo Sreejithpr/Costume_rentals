@@ -1,5 +1,6 @@
 package com.costumerental.billing.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -14,7 +15,7 @@ import java.util.List;
 public class Costume {
     
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
     @NotBlank(message = "Costume name is required")
@@ -36,10 +37,15 @@ public class Costume {
     @Column(name = "category", nullable = false)
     private String category;
     
-    @NotNull(message = "Daily rental price is required")
-    @DecimalMin(value = "0.0", inclusive = false, message = "Daily rental price must be greater than 0")
-    @Column(name = "daily_rental_price", nullable = false, precision = 10, scale = 2)
-    private BigDecimal dailyRentalPrice;
+    @NotNull(message = "Sell price is required")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Sell price must be greater than 0")
+    @Column(name = "sell_price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal sellPrice;
+    
+    @NotNull(message = "Original price is required")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Original price must be greater than 0")
+    @Column(name = "original_price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal originalPrice;
     
     @Column(name = "available", nullable = false)
     private Boolean available = true;
@@ -48,27 +54,30 @@ public class Costume {
     private Integer stockQuantity = 1;
     
     @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private List<Rental> rentals;
     
     // Constructors
     public Costume() {}
     
-    public Costume(String name, String description, String size, String category, BigDecimal dailyRentalPrice) {
+    public Costume(String name, String description, String size, String category, BigDecimal sellPrice, BigDecimal originalPrice) {
         this.name = name;
         this.description = description;
         this.size = size;
         this.category = category;
-        this.dailyRentalPrice = dailyRentalPrice;
+        this.sellPrice = sellPrice;
+        this.originalPrice = originalPrice;
         this.available = true;
         this.stockQuantity = 1;
     }
     
-    public Costume(String name, String description, String size, String category, BigDecimal dailyRentalPrice, Integer stockQuantity) {
+    public Costume(String name, String description, String size, String category, BigDecimal sellPrice, BigDecimal originalPrice, Integer stockQuantity) {
         this.name = name;
         this.description = description;
         this.size = size;
         this.category = category;
-        this.dailyRentalPrice = dailyRentalPrice;
+        this.sellPrice = sellPrice;
+        this.originalPrice = originalPrice;
         this.available = true;
         this.stockQuantity = stockQuantity;
     }
@@ -114,12 +123,20 @@ public class Costume {
         this.category = category;
     }
     
-    public BigDecimal getDailyRentalPrice() {
-        return dailyRentalPrice;
+    public BigDecimal getSellPrice() {
+        return sellPrice;
     }
     
-    public void setDailyRentalPrice(BigDecimal dailyRentalPrice) {
-        this.dailyRentalPrice = dailyRentalPrice;
+    public void setSellPrice(BigDecimal sellPrice) {
+        this.sellPrice = sellPrice;
+    }
+    
+    public BigDecimal getOriginalPrice() {
+        return originalPrice;
+    }
+    
+    public void setOriginalPrice(BigDecimal originalPrice) {
+        this.originalPrice = originalPrice;
     }
     
     public Boolean getAvailable() {

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ViewChild, TemplateRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -11,10 +11,13 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatTableDataSource } from '@angular/material/table';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDividerModule } from '@angular/material/divider';
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -29,6 +32,15 @@ interface SelectedCostumeItem {
   costume: Costume;
   size: string;
   quantity: number;
+}
+
+interface CustomerRentalGroup {
+  customer: Customer;
+  rentals: Rental[];
+  activeCount: number;
+  returnedCount: number;
+  cancelledCount: number;
+  totalAmount: number;
 }
 
 @Component({
@@ -47,9 +59,12 @@ interface SelectedCostumeItem {
     MatDatepickerModule,
     MatChipsModule,
     MatProgressSpinnerModule,
+    MatProgressBarModule,
     MatSnackBarModule,
     MatAutocompleteModule,
-    MatBadgeModule
+    MatBadgeModule,
+    MatDialogModule,
+    MatDividerModule
   ],
   template: `
     <div class="page-header">
@@ -60,23 +75,45 @@ interface SelectedCostumeItem {
       </button>
     </div>
 
+    <!-- View Toggle -->
+    <div class="view-toggle-section">
+      <button mat-stroked-button 
+              [color]="!isGroupedView ? 'primary' : ''" 
+              (click)="toggleView(false)"
+              class="view-toggle-btn">
+        <mat-icon>list</mat-icon>
+        Individual View
+      </button>
+      <button mat-stroked-button 
+              [color]="isGroupedView ? 'primary' : ''" 
+              (click)="toggleView(true)"
+              class="view-toggle-btn">
+        <mat-icon>group</mat-icon>
+        Grouped by Customer
+      </button>
+    </div>
+
     <!-- Filter Buttons -->
     <div class="action-buttons">
       <button mat-button (click)="filterRentals('all')" 
               [class.active]="currentFilter === 'all'">
-        All Rentals
+        All Rentals ({{ rentals.length }})
       </button>
       <button mat-button (click)="filterRentals('active')"
               [class.active]="currentFilter === 'active'">
-        Active
+        Active ({{ getActiveCount() }})
       </button>
       <button mat-button (click)="filterRentals('overdue')"
               [class.active]="currentFilter === 'overdue'">
-        Overdue
+        Overdue ({{ getOverdueCount() }})
       </button>
       <button mat-button (click)="filterRentals('returned')"
               [class.active]="currentFilter === 'returned'">
-        Returned
+        Returned ({{ getReturnedCount() }})
+      </button>
+      <button mat-button (click)="filterRentals('cancelled')"
+              [class.active]="currentFilter === 'cancelled'">
+        Cancelled ({{ getCancelledCount() }})
       </button>
     </div>
 
@@ -147,8 +184,8 @@ interface SelectedCostumeItem {
                 </ng-container>
                 
                 <ng-container matColumnDef="price">
-                  <th mat-header-cell *matHeaderCellDef>Price</th>
-                  <td mat-cell *matCellDef="let costume">₹{{ costume.dailyRentalPrice }}</td>
+                  <th mat-header-cell *matHeaderCellDef>Sell Price</th>
+                  <td mat-cell *matCellDef="let costume">₹{{ costume.sellPrice }}</td>
                 </ng-container>
                 
                 <ng-container matColumnDef="actions">
@@ -215,13 +252,13 @@ interface SelectedCostumeItem {
                 
                 <ng-container matColumnDef="unitPrice">
                   <th mat-header-cell *matHeaderCellDef>Unit Price</th>
-                  <td mat-cell *matCellDef="let item">₹{{ item.costume.dailyRentalPrice }}</td>
+                  <td mat-cell *matCellDef="let item">₹{{ item.costume.sellPrice }}</td>
                 </ng-container>
                 
                 <ng-container matColumnDef="totalPrice">
                   <th mat-header-cell *matHeaderCellDef>Total</th>
                   <td mat-cell *matCellDef="let item">
-                    <strong>₹{{ item.costume.dailyRentalPrice * item.quantity }}</strong>
+                    <strong>₹{{ item.costume.sellPrice * item.quantity }}</strong>
                   </td>
                 </ng-container>
                 
@@ -246,7 +283,7 @@ interface SelectedCostumeItem {
             <!-- Total Price -->
             <div class="total-summary">
               <div class="total-items">Total Items: {{ getTotalSelectedItems() }}</div>
-              <div class="total-price">Total Daily Price: <strong>₹{{ getTotalPrice() }}</strong></div>
+              <div class="total-price">Total Sell Price: <strong>₹{{ getTotalPrice() }}</strong></div>
             </div>
           </div>
         </div>
@@ -263,11 +300,6 @@ interface SelectedCostumeItem {
                 <mat-form-field class="form-field" appearance="outline">
                   <mat-label>First Name</mat-label>
                   <input matInput formControlName="firstName" placeholder="Enter first name" required>
-                  <mat-icon matSuffix>person</mat-icon>
-                </mat-form-field>
-                <mat-form-field class="form-field" appearance="outline">
-                  <mat-label>Last Name</mat-label>
-                  <input matInput formControlName="lastName" placeholder="Enter last name" required>
                   <mat-icon matSuffix>person</mat-icon>
                 </mat-form-field>
               </div>
@@ -322,11 +354,12 @@ interface SelectedCostumeItem {
                 mat-raised-button 
                 color="primary" 
                 type="submit" 
-                [disabled]="!rentalForm.valid || selectedCostumes.length === 0">
-                <mat-icon>add_shopping_cart</mat-icon>
-                Create Rental ({{ getTotalSelectedItems() }} items)
+                [disabled]="!rentalForm.valid || selectedCostumes.length === 0 || loading">
+                <mat-spinner diameter="16" *ngIf="loading"></mat-spinner>
+                <mat-icon *ngIf="!loading">add_shopping_cart</mat-icon>
+                {{ loading ? 'Creating...' : 'Create Rental (' + getTotalSelectedItems() + ' items)' }}
               </button>
-              <button mat-button type="button" (click)="cancelAdd()">
+              <button mat-button type="button" (click)="cancelAdd()" [disabled]="loading">
                 <mat-icon>cancel</mat-icon>
                 Cancel
               </button>
@@ -344,36 +377,60 @@ interface SelectedCostumeItem {
             <mat-spinner></mat-spinner>
           </div>
           
-          <table mat-table [dataSource]="filteredRentals" *ngIf="!loading">
+                    <!-- Individual Rentals Table -->
+          <table mat-table [dataSource]="dataSource" class="rentals-table" *ngIf="!loading && !isGroupedView">
+            
+            <!-- ID Column -->
+            <ng-container matColumnDef="id">
+              <th mat-header-cell *matHeaderCellDef>ID</th>
+              <td mat-cell *matCellDef="let rental">
+                <strong>#{{ rental.id }}</strong>
+              </td>
+            </ng-container>
+
+            <!-- Customer Column -->
             <ng-container matColumnDef="customer">
               <th mat-header-cell *matHeaderCellDef>Customer</th>
               <td mat-cell *matCellDef="let rental">
-                {{ rental.customer.firstName }} {{ rental.customer.lastName }}
+                <div class="customer-name">{{ rental.customer?.firstName || 'Unknown' }}</div>
+                <div class="customer-phone" *ngIf="rental.customer?.phone">{{ rental.customer.phone }}</div>
               </td>
             </ng-container>
 
+            <!-- Costume Column -->
             <ng-container matColumnDef="costume">
               <th mat-header-cell *matHeaderCellDef>Costume</th>
-              <td mat-cell *matCellDef="let rental">{{ rental.costume.name }}</td>
+              <td mat-cell *matCellDef="let rental">
+                <div class="costume-name">{{ rental.costume?.name || 'Unknown' }}</div>
+                <div class="costume-category" *ngIf="rental.costume?.category">{{ rental.costume.category }}</div>
+              </td>
             </ng-container>
 
+            <!-- Rental Date Column -->
             <ng-container matColumnDef="rentalDate">
-              <th mat-header-cell *matHeaderCellDef>Rental Date</th>
-              <td mat-cell *matCellDef="let rental">{{ rental.rentalDate | date }}</td>
+              <th mat-header-cell *matHeaderCellDef>Start Date</th>
+              <td mat-cell *matCellDef="let rental">
+                {{ rental.rentalDate | date:'MMM dd, yyyy' }}
+              </td>
             </ng-container>
 
+            <!-- Expected Return Column -->
             <ng-container matColumnDef="expectedReturn">
               <th mat-header-cell *matHeaderCellDef>Expected Return</th>
-              <td mat-cell *matCellDef="let rental">{{ rental.expectedReturnDate | date }}</td>
+              <td mat-cell *matCellDef="let rental">
+                {{ rental.expectedReturnDate | date:'MMM dd, yyyy' }}
+              </td>
             </ng-container>
 
+            <!-- Actual Return Column -->
             <ng-container matColumnDef="actualReturn">
               <th mat-header-cell *matHeaderCellDef>Actual Return</th>
               <td mat-cell *matCellDef="let rental">
-                {{ rental.actualReturnDate ? (rental.actualReturnDate | date) : '-' }}
+                {{ rental.actualReturnDate ? (rental.actualReturnDate | date:'MMM dd, yyyy') : '-' }}
               </td>
             </ng-container>
 
+            <!-- Status Column -->
             <ng-container matColumnDef="status">
               <th mat-header-cell *matHeaderCellDef>Status</th>
               <td mat-cell *matCellDef="let rental">
@@ -385,13 +442,15 @@ interface SelectedCostumeItem {
               </td>
             </ng-container>
 
+            <!-- Actions Column -->
             <ng-container matColumnDef="actions">
               <th mat-header-cell *matHeaderCellDef>Actions</th>
               <td mat-cell *matCellDef="let rental">
                 <button mat-icon-button 
                         *ngIf="rental.status === 'ACTIVE'" 
                         (click)="returnCostume(rental)"
-                        matTooltip="Return Costume">
+                        matTooltip="Return Costume"
+                        color="primary">
                   <mat-icon>assignment_return</mat-icon>
                 </button>
                 <button mat-icon-button 
@@ -401,19 +460,251 @@ interface SelectedCostumeItem {
                         color="warn">
                   <mat-icon>cancel</mat-icon>
                 </button>
+                <button mat-icon-button 
+                        (click)="viewRentalDetails(rental)"
+                        matTooltip="View Details">
+                  <mat-icon>visibility</mat-icon>
+                </button>
               </td>
             </ng-container>
 
-            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+            <!-- Table Headers and Rows -->
+            <tr mat-header-row *matHeaderRowDef="simpleDisplayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: simpleDisplayedColumns;" 
+                [class.overdue-row]="isRentalOverdue(row)"
+                [class.returned-row]="row.status === 'RETURNED'"
+                [class.cancelled-row]="row.status === 'CANCELLED'"
+                class="clickable-row"
+                (click)="openRentalDetails(row)"></tr>
           </table>
 
-          <div *ngIf="filteredRentals.length === 0 && !loading" class="no-data">
+          <!-- Grouped Rentals Table -->
+          <table mat-table [dataSource]="groupedDataSource" class="rentals-table grouped-table" *ngIf="!loading && isGroupedView">
+            
+            <!-- Customer Column -->
+            <ng-container matColumnDef="customer">
+              <th mat-header-cell *matHeaderCellDef>Customer</th>
+              <td mat-cell *matCellDef="let group" class="customer-group-cell">
+                <div class="customer-group-info">
+                  <div class="customer-name">{{ group.customer?.firstName || 'Unknown Customer' }}</div>
+                  <div class="customer-details">
+                    <span *ngIf="group.customer?.phone">📞 {{ group.customer.phone }}</span>
+                    <span *ngIf="group.customer?.email">✉️ {{ group.customer.email }}</span>
+                  </div>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Rentals Summary Column -->
+            <ng-container matColumnDef="rentals">
+              <th mat-header-cell *matHeaderCellDef>Rental Summary</th>
+              <td mat-cell *matCellDef="let group" class="rentals-summary-cell">
+                <div class="rental-summary">
+                  <div class="rental-counts">
+                    <span class="count-badge active" *ngIf="group.activeCount > 0">
+                      Active: {{ group.activeCount }}
+                    </span>
+                    <span class="count-badge returned" *ngIf="group.returnedCount > 0">
+                      Returned: {{ group.returnedCount }}
+                    </span>
+                    <span class="count-badge cancelled" *ngIf="group.cancelledCount > 0">
+                      Cancelled: {{ group.cancelledCount }}
+                    </span>
+                  </div>
+                  <div class="total-rentals">Total: {{ group.rentals.length }} rentals</div>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Total Amount Column -->
+            <ng-container matColumnDef="totalAmount">
+              <th mat-header-cell *matHeaderCellDef>Total Amount</th>
+              <td mat-cell *matCellDef="let group" class="amount-cell">
+                <div class="total-amount">₹{{ group.totalAmount | number:'1.2-2' }}</div>
+              </td>
+            </ng-container>
+
+            <!-- Actions Column -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Actions</th>
+              <td mat-cell *matCellDef="let group" class="actions-cell">
+                <button mat-raised-button 
+                        color="primary" 
+                        (click)="viewCustomerRentals(group)"
+                        class="view-details-btn">
+                  <mat-icon>visibility</mat-icon>
+                  View Details
+                </button>
+                <button mat-icon-button 
+                        (click)="expandCustomerGroup(group)"
+                        matTooltip="Expand/Collapse">
+                  <mat-icon>expand_more</mat-icon>
+                </button>
+              </td>
+            </ng-container>
+
+            <!-- Table Headers and Rows -->
+            <tr mat-header-row *matHeaderRowDef="groupedDisplayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: groupedDisplayedColumns;" 
+                class="grouped-data-row clickable-row"
+                (click)="viewCustomerRentals(row)"></tr>
+          </table>
+
+          <div *ngIf="(dataSource.data.length === 0 || groupedDataSource.data.length === 0) && !loading" class="no-data">
             No rentals found
           </div>
         </mat-card-content>
       </mat-card>
     </div>
+
+    <!-- Rental Details Dialog Template -->
+    <ng-template #rentalDetailsDialog let-data>
+      <div class="rental-details-dialog">
+        <div mat-dialog-title class="dialog-header">
+          <div class="dialog-title-content">
+            <mat-icon class="dialog-icon">receipt_long</mat-icon>
+            <h2>Rental Details - #{{ data.rental.id }}</h2>
+            <mat-chip [class]="getStatusClass(data.rental.status)" class="status-chip">
+              {{ data.rental.status }}
+            </mat-chip>
+          </div>
+          <button mat-icon-button mat-dialog-close class="close-button">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <mat-dialog-content class="dialog-content">
+          <div class="details-table-container">
+            <table mat-table class="details-table">
+              <!-- Customer Information Section -->
+              <div class="section-divider">
+                <mat-icon>person</mat-icon>
+                <span>Customer Information</span>
+              </div>
+              
+              <tr class="detail-row">
+                <td class="label-cell">Customer Name</td>
+                <td class="value-cell">{{ data.rental.customer?.firstName || 'Not Available' }}</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.customer?.phone">
+                <td class="label-cell">Phone Number</td>
+                <td class="value-cell">{{ data.rental.customer.phone }}</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.customer?.email">
+                <td class="label-cell">Email Address</td>
+                <td class="value-cell">{{ data.rental.customer.email }}</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.customer?.address">
+                <td class="label-cell">Address</td>
+                <td class="value-cell">{{ data.rental.customer.address }}</td>
+              </tr>
+
+              <!-- Costume Information Section -->
+              <div class="section-divider">
+                <mat-icon>checkroom</mat-icon>
+                <span>Costume Information</span>
+              </div>
+              
+              <tr class="detail-row">
+                <td class="label-cell">Costume Name</td>
+                <td class="value-cell">{{ data.rental.costume?.name || 'Not Available' }}</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.costume?.category">
+                <td class="label-cell">Category</td>
+                <td class="value-cell">{{ data.rental.costume.category }}</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.costume?.size">
+                <td class="label-cell">Size</td>
+                <td class="value-cell">{{ data.rental.costume.size }}</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.costume?.color">
+                <td class="label-cell">Color</td>
+                <td class="value-cell">{{ data.rental.costume.color }}</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.costume?.sellPrice">
+                <td class="label-cell">Sell Price</td>
+                <td class="value-cell price-cell">₹{{ data.rental.costume.sellPrice | number:'1.2-2' }}</td>
+              </tr>
+
+              <!-- Rental Information Section -->
+              <div class="section-divider">
+                <mat-icon>calendar_month</mat-icon>
+                <span>Rental Information</span>
+              </div>
+              
+              <tr class="detail-row">
+                <td class="label-cell">Rental Start Date</td>
+                <td class="value-cell">{{ data.rental.rentalDate | date:'fullDate' }}</td>
+              </tr>
+              
+              <tr class="detail-row">
+                <td class="label-cell">Expected Return Date</td>
+                <td class="value-cell">{{ data.rental.expectedReturnDate | date:'fullDate' }}</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.actualReturnDate">
+                <td class="label-cell">Actual Return Date</td>
+                <td class="value-cell">{{ data.rental.actualReturnDate | date:'fullDate' }}</td>
+              </tr>
+              
+              <tr class="detail-row">
+                <td class="label-cell">Rental Duration</td>
+                <td class="value-cell duration-cell">{{ getDurationInDays(data.rental) }} days</td>
+              </tr>
+              
+              <tr class="detail-row" *ngIf="data.rental.notes">
+                <td class="label-cell">Notes</td>
+                <td class="value-cell notes-cell">{{ data.rental.notes }}</td>
+              </tr>
+
+              <!-- Bill Information Section -->
+              <div class="section-divider" *ngIf="data.rental.bill">
+                <mat-icon>receipt</mat-icon>
+                <span>Bill Information</span>
+              </div>
+              
+              <tr class="detail-row" *ngIf="data.rental.bill">
+                <td class="label-cell">Bill Status</td>
+                <td class="value-cell">
+                  <mat-chip class="bill-generated-chip">
+                    <mat-icon>check_circle</mat-icon>
+                    Bill Generated
+                  </mat-chip>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </mat-dialog-content>
+
+        <mat-dialog-actions class="dialog-actions">
+          <button mat-stroked-button mat-dialog-close class="close-btn">
+            <mat-icon>close</mat-icon>
+            Close
+          </button>
+          <button mat-raised-button color="primary" 
+                  *ngIf="data.rental.status === 'ACTIVE'" 
+                  (click)="returnCostumeFromDialog(data.rental)"
+                  class="action-btn">
+            <mat-icon>assignment_return</mat-icon>
+            Return Costume
+          </button>
+          <button mat-raised-button color="warn" 
+                  *ngIf="data.rental.status === 'ACTIVE'" 
+                  (click)="cancelRentalFromDialog(data.rental)"
+                  class="action-btn">
+            <mat-icon>cancel</mat-icon>
+            Cancel Rental
+          </button>
+        </mat-dialog-actions>
+      </div>
+    </ng-template>
   `,
   styles: [`
     .form-container {
@@ -724,6 +1015,10 @@ interface SelectedCostumeItem {
       color: var(--text-primary);
     }
 
+    .form-actions button mat-spinner {
+      margin-right: 8px;
+    }
+
     /* Large Screen Optimization */
     @media (min-width: 1200px) {
       .form-container mat-card-content {
@@ -805,9 +1100,476 @@ interface SelectedCostumeItem {
     .mat-column-size { width: 10%; }
     .mat-column-unitPrice { width: 15%; }
     .mat-column-totalPrice { width: 15%; }
+
+    /* Simple Table Styles */
+    .rentals-table {
+      width: 100%;
+      margin-top: 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .mat-mdc-header-row {
+      background-color: var(--primary-color);
+      color: white;
+    }
+
+    .mat-mdc-header-cell {
+      color: white !important;
+      font-weight: 600;
+      padding: 16px 12px;
+    }
+
+    .mat-mdc-row {
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .mat-mdc-row:hover {
+      background-color: #f5f5f5;
+    }
+
+    .mat-mdc-cell {
+      padding: 12px;
+    }
+
+    /* Status chip styles */
+    .status-active {
+      background-color: #4caf50;
+      color: white;
+    }
+
+    .status-returned {
+      background-color: #2196f3;
+      color: white;
+    }
+
+    .status-cancelled {
+      background-color: #757575;
+      color: white;
+    }
+
+    .status-overdue {
+      background-color: #f44336;
+      color: white;
+    }
+
+    .status-default {
+      background-color: #ffc107;
+      color: black;
+    }
+
+    /* Row highlighting */
+    .overdue-row {
+      background-color: #ffebee !important;
+      border-left: 4px solid #f44336;
+    }
+
+    .returned-row {
+      background-color: #e8f5e8 !important;
+    }
+
+    .cancelled-row {
+      background-color: #f5f5f5 !important;
+      opacity: 0.8;
+    }
+
+    /* Customer and costume info */
+    .customer-name {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .customer-phone {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .costume-name {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .costume-category {
+      font-size: 12px;
+      color: #666;
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-top: 2px;
+    }
+
+    /* Clickable Row Styles */
+    .clickable-row {
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .clickable-row:hover {
+      background-color: #f0f8ff !important;
+    }
+
+    /* Dialog Styles */
+    .rental-details-dialog {
+      max-width: 100%;
+      min-width: 700px;
+    }
+
+    .dialog-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px 16px 24px;
+      margin-bottom: 0;
+      border-bottom: 2px solid #f0f0f0;
+      background: linear-gradient(135deg, #007A8E 0%, #016BD1 100%);
+      color: white;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .dialog-title-content {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .dialog-icon {
+      font-size: 24px;
+      color: #FDF958;
+    }
+
+    .dialog-title-content h2 {
+      margin: 0;
+      color: white;
+      font-weight: 600;
+      font-size: 20px;
+    }
+
+    .status-chip {
+      margin-left: 12px;
+      font-weight: 500;
+      font-size: 12px;
+    }
+
+    .close-button {
+      color: white;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+    }
+
+    .close-button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .dialog-content {
+      padding: 0;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+
+    .details-table-container {
+      width: 100%;
+      background: white;
+    }
+
+    .details-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .section-divider {
+      background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
+      padding: 16px 24px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 16px;
+      color: #007A8E;
+      border-bottom: 1px solid #dee2e6;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .section-divider mat-icon {
+      font-size: 20px;
+      color: #016BD1;
+    }
+
+    .detail-row {
+      border-bottom: 1px solid #f1f3f4;
+      transition: background-color 0.2s ease;
+    }
+
+    .detail-row:hover {
+      background-color: #f8f9ff;
+    }
+
+    .label-cell {
+      padding: 16px 24px;
+      font-weight: 600;
+      color: #495057;
+      background-color: #fafafa;
+      width: 35%;
+      border-right: 1px solid #e9ecef;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    .value-cell {
+      padding: 16px 24px;
+      color: #212529;
+      vertical-align: top;
+      word-break: break-word;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .price-cell {
+      font-weight: 600;
+      color: #28a745;
+      font-size: 15px;
+    }
+
+    .duration-cell {
+      font-weight: 500;
+      color: #6c757d;
+    }
+
+    .notes-cell {
+      font-style: italic;
+      color: #6c757d;
+      max-width: 300px;
+      word-wrap: break-word;
+    }
+
+    .bill-generated-chip {
+      background-color: #d4edda !important;
+      color: #155724 !important;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+
+    .bill-generated-chip mat-icon {
+      font-size: 16px;
+    }
+
+    .dialog-actions {
+      padding: 20px 24px;
+      justify-content: flex-end;
+      gap: 12px;
+      border-top: 1px solid #e9ecef;
+      background-color: #f8f9fa;
+    }
+
+    .close-btn {
+      border: 2px solid #6c757d;
+      color: #6c757d;
+      font-weight: 500;
+    }
+
+    .action-btn {
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Responsive dialog */
+    @media (max-width: 768px) {
+      .rental-details-dialog {
+        min-width: 95vw;
+      }
+
+      .dialog-header {
+        padding: 16px 20px;
+      }
+
+      .dialog-title-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .dialog-title-content h2 {
+        font-size: 18px;
+      }
+
+      .details-table,
+      .detail-row {
+        display: block;
+        width: 100%;
+      }
+
+      .label-cell,
+      .value-cell {
+        display: block;
+        width: 100%;
+        padding: 12px 20px;
+        border-right: none;
+      }
+
+      .label-cell {
+        background-color: #f0f3f7;
+        font-weight: 600;
+        font-size: 13px;
+        padding-bottom: 8px;
+        border-bottom: none;
+      }
+
+      .value-cell {
+        padding-top: 0;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e9ecef;
+      }
+
+      .section-divider {
+        padding: 12px 20px;
+        font-size: 15px;
+      }
+
+      .dialog-actions {
+        padding: 16px 20px;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .action-btn,
+      .close-btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+
+    /* View Toggle Styles */
+    .view-toggle-section {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      justify-content: center;
+      padding: 16px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+
+    .view-toggle-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-weight: 500;
+    }
+
+    /* Grouped Table Styles */
+    .grouped-table {
+      margin-top: 20px;
+    }
+
+    .customer-group-cell {
+      padding: 16px 12px;
+    }
+
+    .customer-group-info {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .customer-name {
+      font-weight: 600;
+      font-size: 16px;
+      color: var(--primary-color);
+    }
+
+    .customer-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .customer-details span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .rentals-summary-cell {
+      padding: 16px 12px;
+    }
+
+    .rental-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .rental-counts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .count-badge {
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .count-badge.active {
+      background-color: #4caf50;
+    }
+
+    .count-badge.returned {
+      background-color: #2196f3;
+    }
+
+    .count-badge.cancelled {
+      background-color: #757575;
+    }
+
+    .total-rentals {
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+    }
+
+    .amount-cell {
+      text-align: center;
+      padding: 16px 12px;
+    }
+
+    .total-amount {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--primary-color);
+    }
+
+    .view-details-btn {
+      margin-right: 8px;
+    }
+
+    .grouped-data-row {
+      min-height: 80px;
+    }
+
+    .grouped-data-row:hover {
+      background-color: #f0f8ff !important;
+    }
   `]
 })
 export class RentalsComponent implements OnInit {
+  @ViewChild('rentalDetailsDialog') rentalDetailsDialog!: TemplateRef<any>;
+  
   rentals: Rental[] = [];
   filteredRentals: Rental[] = [];
   customers: Customer[] = [];
@@ -816,7 +1578,16 @@ export class RentalsComponent implements OnInit {
   showAddForm = false;
   currentFilter = 'all';
   displayedColumns: string[] = ['customer', 'costume', 'rentalDate', 'expectedReturn', 'actualReturn', 'status', 'actions'];
+  simpleDisplayedColumns: string[] = ['id', 'customer', 'costume', 'rentalDate', 'expectedReturn', 'actualReturn', 'status', 'actions'];
+  groupedDisplayedColumns: string[] = ['customer', 'rentals', 'totalAmount', 'actions'];
   rentalForm: FormGroup;
+  
+  // Add MatTableDataSource for better table handling
+  dataSource = new MatTableDataSource<Rental>([]);
+  groupedDataSource = new MatTableDataSource<CustomerRentalGroup>([]);
+  
+  // View mode toggle
+  isGroupedView = false;
   
   // New properties for search and selection
   searchControl = new FormControl('');
@@ -837,11 +1608,12 @@ export class RentalsComponent implements OnInit {
     private customerService: CustomerService,
     private costumeService: CostumeService,
     private fb: FormBuilder,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private cdr: ChangeDetectorRef,
+    private dialog: MatDialog
   ) {
     this.rentalForm = this.fb.group({
       firstName: ['', Validators.required],
-      lastName: ['', Validators.required],
       phone: ['', Validators.required],
       email: [''],
       address: [''],
@@ -852,6 +1624,7 @@ export class RentalsComponent implements OnInit {
   }
 
   ngOnInit() {
+    console.log('RentalsComponent ngOnInit called');
     this.loadData();
     this.setupSearchFunctionality();
   }
@@ -867,6 +1640,10 @@ export class RentalsComponent implements OnInit {
     this.rentalService.getAllRentals().subscribe({
       next: (rentals) => {
         this.rentals = rentals;
+        
+        // Initialize dataSource
+        this.dataSource.data = rentals;
+        
         this.filterRentals(this.currentFilter);
         this.loading = false;
       },
@@ -903,19 +1680,45 @@ export class RentalsComponent implements OnInit {
 
   filterRentals(filter: string) {
     this.currentFilter = filter;
+    const today = new Date();
+    
+    // Debug logging
+    console.log(`Filtering rentals with filter: ${filter}`);
+    console.log(`Total rentals: ${this.rentals.length}`);
     
     switch (filter) {
       case 'active':
-        this.filteredRentals = this.rentals.filter(r => r.status === RentalStatus.ACTIVE);
+        // Show ALL active rentals (including overdue ones)
+        this.filteredRentals = this.rentals.filter(r => {
+          console.log(`Checking rental ${r.id}: status = "${r.status}"`);
+          return r.status === 'ACTIVE';
+        });
         break;
       case 'overdue':
-        this.filteredRentals = this.rentals.filter(r => r.status === RentalStatus.OVERDUE);
+        this.filteredRentals = this.rentals.filter(r => {
+          if (r.status === 'ACTIVE') {
+            const expectedReturnDate = new Date(r.expectedReturnDate);
+            return expectedReturnDate < today; // Active but past expected return date
+          }
+          return r.status === 'OVERDUE'; // Or explicitly marked as overdue
+        });
         break;
       case 'returned':
-        this.filteredRentals = this.rentals.filter(r => r.status === RentalStatus.RETURNED);
+        this.filteredRentals = this.rentals.filter(r => r.status === 'RETURNED');
+        break;
+      case 'cancelled':
+        this.filteredRentals = this.rentals.filter(r => r.status === 'CANCELLED');
         break;
       default:
         this.filteredRentals = this.rentals;
+    }
+    
+    // Update the MatTableDataSource
+    this.dataSource.data = this.filteredRentals;
+    
+    // Update grouped view if active
+    if (this.isGroupedView) {
+      this.groupRentalsByCustomer();
     }
   }
 
@@ -1025,18 +1828,18 @@ export class RentalsComponent implements OnInit {
 
   getTotalPrice(): number {
     return this.selectedCostumes.reduce((total, item) => 
-      total + (item.costume.dailyRentalPrice * item.quantity), 0
+      total + (item.costume.sellPrice * item.quantity), 0
     );
   }
 
   createMultipleRentals() {
     if (this.rentalForm.valid && this.selectedCostumes.length > 0) {
+      this.loading = true; // Add loading state
       const formValue = this.rentalForm.value;
       
       // First create the customer
       const customerRequest = {
         firstName: formValue.firstName,
-        lastName: formValue.lastName,
         phone: formValue.phone,
         email: formValue.email || '',
         address: formValue.address || ''
@@ -1045,7 +1848,7 @@ export class RentalsComponent implements OnInit {
       this.customerService.createCustomer(customerRequest).subscribe({
         next: (customer) => {
           // Now create rentals with the new customer ID
-          const promises: Promise<Rental | undefined>[] = [];
+          const rentalRequests: CreateRentalRequest[] = [];
           
           this.selectedCostumes.forEach(item => {
             for (let i = 0; i < item.quantity; i++) {
@@ -1056,37 +1859,71 @@ export class RentalsComponent implements OnInit {
                 expectedReturnDate: this.formatDate(formValue.expectedReturnDate),
                 notes: `${formValue.notes || ''} - Size: ${item.size}`.trim()
               };
-              promises.push(this.rentalService.createRental(request).toPromise());
+              rentalRequests.push(request);
             }
           });
 
-          Promise.all(promises).then(
-            (rentals) => {
-              const successfulRentals = rentals.filter(rental => rental);
-              successfulRentals.forEach(rental => {
-                if (rental) {
-                  this.rentals.push(rental);
-                }
-              });
-              this.filterRentals(this.currentFilter);
-              this.loadAvailableCostumes(); // Refresh available costumes
-              this.loadCustomers(); // Refresh customers list
-              this.resetForm();
-              this.snackBar.open(`Customer created and ${successfulRentals.length} rentals created successfully`, 'Close', { duration: 4000 });
-            }
-          ).catch(
-            (error) => {
-              console.error('Error creating rentals:', error);
-              this.snackBar.open('Customer created but error creating some rentals', 'Close', { duration: 4000 });
-            }
-          );
+          // Create rentals sequentially to avoid overwhelming the server
+          this.createRentalsSequentially(rentalRequests, 0, []);
         },
         error: (error) => {
           console.error('Error creating customer:', error);
+          this.loading = false; // Stop loading on error
+          // Always close form on error
+          this.resetFormAndClose();
           this.snackBar.open('Error creating customer. Please try again.', 'Close', { duration: 3000 });
         }
       });
     }
+  }
+
+  createRentalsSequentially(requests: CreateRentalRequest[], index: number, successfulRentals: Rental[]) {
+    if (index >= requests.length) {
+      // All rentals processed
+      this.loadRentals(); // Reload all data
+      this.loadAvailableCostumes(); // Refresh available costumes
+      this.loadCustomers(); // Refresh customers list
+      
+      this.resetFormAndClose();
+      
+      if (successfulRentals.length === requests.length) {
+        this.snackBar.open(`Customer created and all ${successfulRentals.length} rentals created successfully`, 'Close', { duration: 4000 });
+      } else if (successfulRentals.length > 0) {
+        this.snackBar.open(`Customer created and ${successfulRentals.length} out of ${requests.length} rentals created successfully`, 'Close', { duration: 5000 });
+      } else {
+        this.snackBar.open(`Customer created but failed to create any rentals. Please check backend connection.`, 'Close', { duration: 6000 });
+      }
+      
+      this.loading = false;
+      return;
+    }
+
+    const request = requests[index];
+    console.log(`Creating rental ${index + 1}/${requests.length}:`, request);
+    
+    this.rentalService.createRental(request).subscribe({
+      next: (rental) => {
+        console.log(`Rental ${index + 1} created successfully:`, rental);
+        successfulRentals.push(rental);
+        this.createRentalsSequentially(requests, index + 1, successfulRentals);
+      },
+      error: (error) => {
+        console.error(`Error creating rental ${index + 1}:`, error);
+        console.error('Request that failed:', request);
+        
+        // Show specific error message
+        if (error.status === 0) {
+          console.error('Backend server appears to be down');
+        } else if (error.status === 400) {
+          console.error('Bad request - check data format');
+        } else if (error.status === 404) {
+          console.error('Resource not found - customer or costume may not exist');
+        }
+        
+        // Continue with next rental even if this one fails
+        this.createRentalsSequentially(requests, index + 1, successfulRentals);
+      }
+    });
   }
 
   createRental() {
@@ -1095,6 +1932,7 @@ export class RentalsComponent implements OnInit {
   }
 
   returnCostume(rental: Rental) {
+    if (confirm(`Are you sure you want to mark "${rental.costume.name}" as returned?`)) {
     const actualReturnDate = new Date();
     const request = {
       actualReturnDate: this.formatDate(actualReturnDate)
@@ -1102,49 +1940,215 @@ export class RentalsComponent implements OnInit {
     
     this.rentalService.returnCostume(rental.id!, request).subscribe({
       next: (updatedRental) => {
-        const index = this.rentals.findIndex(r => r.id === rental.id);
-        if (index !== -1) {
-          this.rentals[index] = updatedRental;
-          this.filterRentals(this.currentFilter);
-          this.loadAvailableCostumes(); // Refresh available costumes
-        }
-        this.snackBar.open('Costume returned successfully', 'Close', { duration: 3000 });
+          // Reload all data to ensure proper status updates and data consistency
+          this.loadRentals(); // This will reload all rentals and apply current filter
+          this.loadAvailableCostumes(); // Refresh available costumes to show updated stock
+          this.snackBar.open(`"${rental.costume.name}" returned successfully on ${this.formatDate(actualReturnDate)}`, 'Close', { duration: 4000 });
       },
       error: (error) => {
         console.error('Error returning costume:', error);
-        this.snackBar.open('Error returning costume', 'Close', { duration: 3000 });
+          this.snackBar.open('Error returning costume. Please try again.', 'Close', { duration: 3000 });
       }
     });
+    }
   }
 
   cancelRental(rental: Rental) {
-    if (confirm('Are you sure you want to cancel this rental?')) {
+    if (confirm(`Are you sure you want to cancel the rental of "${rental.costume.name}" for ${rental.customer.firstName}?`)) {
       this.rentalService.cancelRental(rental.id!).subscribe({
         next: (updatedRental) => {
-          const index = this.rentals.findIndex(r => r.id === rental.id);
-          if (index !== -1) {
-            this.rentals[index] = updatedRental;
-            this.filterRentals(this.currentFilter);
-            this.loadAvailableCostumes(); // Refresh available costumes
-          }
-          this.snackBar.open('Rental cancelled successfully', 'Close', { duration: 3000 });
+          // Reload all data to ensure proper status updates and data consistency
+          this.loadRentals(); // This will reload all rentals and apply current filter
+          this.loadAvailableCostumes(); // Refresh available costumes to show updated stock
+          this.snackBar.open(`Rental of "${rental.costume.name}" cancelled successfully`, 'Close', { duration: 3000 });
         },
         error: (error) => {
           console.error('Error cancelling rental:', error);
-          this.snackBar.open('Error cancelling rental', 'Close', { duration: 3000 });
+          this.snackBar.open('Error cancelling rental. Please try again.', 'Close', { duration: 3000 });
         }
       });
     }
   }
 
+  // Method to get the display status (including computed overdue status)
+  getDisplayStatus(rental: Rental): string {
+    if (rental.status === 'ACTIVE') {
+      const today = new Date();
+      const expectedReturnDate = new Date(rental.expectedReturnDate);
+      if (expectedReturnDate < today) {
+        return 'OVERDUE';
+      }
+    }
+    return rental.status;
+  }
+
+  // Method to get the appropriate CSS class for display status
+  getDisplayStatusClass(rental: Rental): string {
+    return this.getStatusClass(this.getDisplayStatus(rental));
+  }
+
+  // Helper methods to get counts for filter buttons
+  getActiveCount(): number {
+    return this.rentals.filter(r => r.status === 'ACTIVE').length;
+  }
+
+  getOverdueCount(): number {
+    const today = new Date();
+    return this.rentals.filter(r => {
+      if (r.status === 'ACTIVE') {
+        const expectedReturnDate = new Date(r.expectedReturnDate);
+        return expectedReturnDate < today;
+      }
+      return r.status === 'OVERDUE';
+    }).length;
+  }
+
+  getReturnedCount(): number {
+    return this.rentals.filter(r => r.status === 'RETURNED').length;
+  }
+
+  getCancelledCount(): number {
+    return this.rentals.filter(r => r.status === 'CANCELLED').length;
+  }
+
+  // Simple helper methods
   getStatusClass(status: string): string {
     switch (status) {
       case 'ACTIVE': return 'status-active';
       case 'RETURNED': return 'status-returned';
-      case 'OVERDUE': return 'status-overdue';
       case 'CANCELLED': return 'status-cancelled';
-      default: return '';
+      case 'OVERDUE': return 'status-overdue';
+      default: return 'status-default';
     }
+  }
+
+  isRentalOverdue(rental: Rental): boolean {
+    if (rental.status !== 'ACTIVE') return false;
+    const today = new Date();
+    const expectedReturn = new Date(rental.expectedReturnDate);
+    return today > expectedReturn;
+  }
+
+  // Dialog and detail methods
+  openRentalDetails(rental: Rental): void {
+    const dialogRef = this.dialog.open(this.rentalDetailsDialog, {
+      width: '800px',
+      maxWidth: '90vw',
+      maxHeight: '90vh',
+      data: { rental: rental },
+      panelClass: 'rental-details-panel'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result === 'refresh') {
+        this.loadRentals();
+      }
+    });
+  }
+
+  viewRentalDetails(rental: Rental): void {
+    this.openRentalDetails(rental);
+  }
+
+  getDurationInDays(rental: Rental): number {
+    const startDate = new Date(rental.rentalDate);
+    const endDate = rental.actualReturnDate ? new Date(rental.actualReturnDate) : new Date(rental.expectedReturnDate);
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  }
+
+  returnCostumeFromDialog(rental: Rental): void {
+    this.returnCostume(rental);
+    this.dialog.closeAll();
+  }
+
+  cancelRentalFromDialog(rental: Rental): void {
+    this.cancelRental(rental);
+    this.dialog.closeAll();
+  }
+
+  // Grouped view methods
+  toggleView(isGrouped: boolean): void {
+    this.isGroupedView = isGrouped;
+    if (isGrouped) {
+      this.groupRentalsByCustomer();
+    }
+  }
+
+  groupRentalsByCustomer(): void {
+    const customerGroups = new Map<number, CustomerRentalGroup>();
+    
+    this.filteredRentals.forEach(rental => {
+      const customerId = rental.customer?.id;
+      if (!customerId) return;
+      
+      if (!customerGroups.has(customerId)) {
+        customerGroups.set(customerId, {
+          customer: rental.customer,
+          rentals: [],
+          activeCount: 0,
+          returnedCount: 0,
+          cancelledCount: 0,
+          totalAmount: 0
+        });
+      }
+      
+      const group = customerGroups.get(customerId)!;
+      group.rentals.push(rental);
+      
+      // Count by status
+      switch (rental.status) {
+        case 'ACTIVE':
+          group.activeCount++;
+          break;
+        case 'RETURNED':
+          group.returnedCount++;
+          break;
+        case 'CANCELLED':
+          group.cancelledCount++;
+          break;
+      }
+      
+      // Calculate total amount (approximate based on daily rate and duration)
+              if (rental.costume?.sellPrice) {
+          const duration = this.getDurationInDays(rental);
+          group.totalAmount += rental.costume.sellPrice * duration;
+      }
+    });
+    
+    this.groupedDataSource.data = Array.from(customerGroups.values());
+  }
+
+  viewCustomerRentals(group: CustomerRentalGroup): void {
+    // Show a dialog with all rentals for this customer
+    const customerName = group.customer?.firstName || 'Unknown Customer';
+    const rentalsList = group.rentals.map(rental => 
+      `• ${rental.costume?.name || 'Unknown'} - ${rental.status} (${rental.rentalDate})`
+    ).join('\n');
+    
+    const details = `
+Customer: ${customerName}
+Phone: ${group.customer?.phone || 'N/A'}
+Email: ${group.customer?.email || 'N/A'}
+
+Rentals (${group.rentals.length}):
+${rentalsList}
+
+Summary:
+- Active: ${group.activeCount}
+- Returned: ${group.returnedCount} 
+- Cancelled: ${group.cancelledCount}
+- Total Amount: ₹${group.totalAmount.toFixed(2)}
+    `;
+    
+    alert(details);
+  }
+
+  expandCustomerGroup(group: CustomerRentalGroup): void {
+    // Toggle to individual view showing only this customer's rentals
+    this.isGroupedView = false;
+    this.filteredRentals = group.rentals;
+    this.dataSource.data = this.filteredRentals;
   }
 
   resetForm() {
@@ -1159,8 +2163,32 @@ export class RentalsComponent implements OnInit {
     this.showAddForm = false;
   }
 
+  resetFormAndClose() {
+    // Force close form and reset all states
+    this.loading = false;
+    this.showAddForm = false;
+    this.selectedCostumes = [];
+    this.updateSelectedCostumesDataSource();
+    this.selectedCostume = null;
+    this.selectedSize = '';
+    this.selectedQuantity = 1;
+    this.searchControl.setValue('');
+    this.rentalForm.reset();
+    this.rentalForm.patchValue({ rentalDate: new Date() });
+    
+    // Force Angular change detection to update the UI immediately
+    this.cdr.detectChanges();
+    
+    // Double-check with setTimeout to ensure form is closed
+    setTimeout(() => {
+      this.showAddForm = false;
+      this.loading = false;
+      this.cdr.detectChanges();
+    }, 100);
+  }
+
   cancelAdd() {
-    this.resetForm();
+    this.resetFormAndClose();
   }
 
   private formatDate(date: Date): string {

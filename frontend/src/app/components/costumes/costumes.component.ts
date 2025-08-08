@@ -102,10 +102,17 @@ import { Costume } from '../../models/costume.model';
           </div>
           <div class="form-row">
             <mat-form-field class="form-field">
-              <mat-label>Daily Rental Price</mat-label>
-              <input matInput type="number" step="0.01" formControlName="dailyRentalPrice" required>
-              <span matPrefix>$</span>
+              <mat-label>Sell Price</mat-label>
+              <input matInput type="number" step="0.01" formControlName="sellPrice" required>
+              <span matPrefix>₹</span>
             </mat-form-field>
+            <mat-form-field class="form-field">
+              <mat-label>Original Price</mat-label>
+              <input matInput type="number" step="0.01" formControlName="originalPrice" required>
+              <span matPrefix>₹</span>
+            </mat-form-field>
+          </div>
+          <div class="form-row">
             <mat-form-field class="form-field">
               <mat-label>Stock Quantity</mat-label>
               <input matInput type="number" formControlName="stockQuantity" required min="1">
@@ -157,10 +164,17 @@ import { Costume } from '../../models/costume.model';
           </div>
           <div class="form-row">
             <mat-form-field class="form-field">
-              <mat-label>Daily Rental Price</mat-label>
-              <input matInput type="number" step="0.01" formControlName="dailyRentalPrice" required>
-              <span matPrefix>$</span>
+              <mat-label>Sell Price</mat-label>
+              <input matInput type="number" step="0.01" formControlName="sellPrice" required>
+              <span matPrefix>₹</span>
             </mat-form-field>
+            <mat-form-field class="form-field">
+              <mat-label>Original Price</mat-label>
+              <input matInput type="number" step="0.01" formControlName="originalPrice" required>
+              <span matPrefix>₹</span>
+            </mat-form-field>
+          </div>
+          <div class="form-row">
             <mat-form-field class="form-field">
               <mat-label>Stock Quantity</mat-label>
               <input matInput type="number" formControlName="stockQuantity" required min="1">
@@ -211,9 +225,16 @@ import { Costume } from '../../models/costume.model';
             </ng-container>
 
             <ng-container matColumnDef="price">
-              <th mat-header-cell *matHeaderCellDef>Daily Price</th>
+              <th mat-header-cell *matHeaderCellDef>Sell Price</th>
               <td mat-cell *matCellDef="let costume">
-                <span class="currency">₹{{ costume.dailyRentalPrice | number:'1.2-2' }}</span>
+                ₹{{ costume.sellPrice | number:'1.2-2' }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="originalPrice">
+              <th mat-header-cell *matHeaderCellDef>Original Price</th>
+              <td mat-cell *matCellDef="let costume">
+                ₹{{ costume.originalPrice | number:'1.2-2' }}
               </td>
             </ng-container>
 
@@ -383,7 +404,7 @@ export class CostumesComponent implements OnInit {
   showAvailableOnly = false;
   searchTerm = '';
   editingCostume: Costume | null = null;
-  displayedColumns: string[] = ['name', 'category', 'size', 'price', 'stock', 'availability', 'actions'];
+  displayedColumns: string[] = ['name', 'category', 'size', 'price', 'originalPrice', 'stock', 'availability', 'actions'];
   costumeForm: FormGroup;
   editCostumeForm: FormGroup;
 
@@ -397,7 +418,8 @@ export class CostumesComponent implements OnInit {
       description: [''],
       category: ['', Validators.required],
       size: ['', Validators.required],
-      dailyRentalPrice: ['', [Validators.required, Validators.min(0.01)]],
+      sellPrice: ['', [Validators.required, Validators.min(0.01)]],
+      originalPrice: ['', [Validators.required, Validators.min(0.01)]],
       stockQuantity: [1, [Validators.required, Validators.min(1)]]
     });
 
@@ -406,7 +428,8 @@ export class CostumesComponent implements OnInit {
       description: [''],
       category: ['', Validators.required],
       size: ['', Validators.required],
-      dailyRentalPrice: ['', [Validators.required, Validators.min(0.01)]],
+      sellPrice: ['', [Validators.required, Validators.min(0.01)]],
+      originalPrice: ['', [Validators.required, Validators.min(0.01)]],
       stockQuantity: [1, [Validators.required, Validators.min(1)]],
       available: [true]
     });
@@ -463,6 +486,7 @@ export class CostumesComponent implements OnInit {
 
   addCostume() {
     if (this.costumeForm.valid) {
+      this.loading = true;
       const costume: Costume = {
         ...this.costumeForm.value,
         available: true
@@ -475,10 +499,13 @@ export class CostumesComponent implements OnInit {
           this.costumeForm.reset();
           this.costumeForm.patchValue({ stockQuantity: 1 }); // Reset to default
           this.showAddForm = false;
+          this.loading = false;
           this.snackBar.open('Costume added successfully', 'Close', { duration: 3000 });
         },
         error: (error) => {
           console.error('Error adding costume:', error);
+          this.loading = false;
+          this.showAddForm = false; // Close form even on error
           this.snackBar.open('Error adding costume', 'Close', { duration: 3000 });
         }
       });
@@ -492,7 +519,8 @@ export class CostumesComponent implements OnInit {
       description: costume.description,
       category: costume.category,
       size: costume.size,
-      dailyRentalPrice: costume.dailyRentalPrice,
+      sellPrice: costume.sellPrice,
+      originalPrice: costume.originalPrice,
       stockQuantity: costume.stockQuantity || 1,
       available: costume.available
     });
@@ -502,6 +530,7 @@ export class CostumesComponent implements OnInit {
 
   updateCostume() {
     if (this.editCostumeForm.valid && this.editingCostume) {
+      this.loading = true;
       const updatedCostume: Costume = {
         ...this.editCostumeForm.value,
         id: this.editingCostume.id
@@ -512,10 +541,13 @@ export class CostumesComponent implements OnInit {
           // Reload all data to ensure we have the latest information
           this.loadCostumes();
           this.cancelEdit();
+          this.loading = false;
           this.snackBar.open('Costume updated successfully', 'Close', { duration: 3000 });
         },
         error: (error) => {
           console.error('Error updating costume:', error);
+          this.loading = false;
+          this.cancelEdit(); // Close form even on error
           this.snackBar.open('Error updating costume', 'Close', { duration: 3000 });
         }
       });
@@ -526,6 +558,7 @@ export class CostumesComponent implements OnInit {
     this.showEditForm = false;
     this.editingCostume = null;
     this.editCostumeForm.reset();
+    this.loading = false; // Ensure loading state is reset
   }
 
   deleteCostume(costumeId: number) {
@@ -551,5 +584,6 @@ export class CostumesComponent implements OnInit {
     this.showAddForm = false;
     this.costumeForm.reset();
     this.showEditForm = false; // Also close edit form if open
+    this.loading = false; // Ensure loading state is reset
   }
 }

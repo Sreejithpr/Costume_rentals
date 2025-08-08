@@ -1,5 +1,6 @@
 package com.costumerental.billing.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -12,12 +13,13 @@ import java.time.LocalDateTime;
 public class Bill {
     
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
     @NotNull(message = "Rental is required")
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "rental_id", nullable = false)
+    @JsonIgnore
     private Rental rental;
     
     @NotNull(message = "Total amount is required")
