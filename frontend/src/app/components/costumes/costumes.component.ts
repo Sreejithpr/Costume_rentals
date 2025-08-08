@@ -213,7 +213,7 @@ import { Costume } from '../../models/costume.model';
             <ng-container matColumnDef="price">
               <th mat-header-cell *matHeaderCellDef>Daily Price</th>
               <td mat-cell *matCellDef="let costume">
-                <span class="currency">\${{ costume.dailyRentalPrice | number:'1.2-2' }}</span>
+                <span class="currency">₹{{ costume.dailyRentalPrice | number:'1.2-2' }}</span>
               </td>
             </ng-container>
 

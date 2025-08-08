@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: costume-rental-db
+    environment:
+      POSTGRES_DB: costume_rental
+      POSTGRES_USER: costume_rental_user
+      POSTGRES_PASSWORD: costume_rental_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/setup-database.sql:/docker-entrypoint-initdb.d/setup-database.sql
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

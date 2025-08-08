@@ -9,13 +9,14 @@ import com.costumerental.billing.repository.RentalRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
 @Service
-@Transactional
+@Transactional(isolation = Isolation.READ_COMMITTED, timeout = 30)
 public class RentalService {
     
     @Autowired

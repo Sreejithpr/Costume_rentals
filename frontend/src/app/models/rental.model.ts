@@ -31,3 +31,11 @@ export interface CreateRentalRequest {
 export interface ReturnCostumeRequest {
   actualReturnDate: string;
 }
+
+export interface CreateMultipleRentalsRequest {
+  customerId: number;
+  costumeIds: number[];
+  rentalDate: string;
+  expectedReturnDate: string;
+  notes?: string;
+}

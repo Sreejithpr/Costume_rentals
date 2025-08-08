@@ -1,12 +1,12 @@
 # Costume Rental Billing System
 
-A comprehensive billing system for costume rental shops built with Spring Boot (backend) and Angular (frontend), using SQLite as the database.
+A comprehensive billing system for costume rental shops built with Spring Boot (backend) and Angular (frontend), using PostgreSQL as the database.
 
 ## 🏗️ Architecture
 
 - **Backend**: Java Spring Boot with REST API
 - **Frontend**: Angular 17 with Angular Material
-- **Database**: SQLite
+- **Database**: PostgreSQL
 - **Build Tools**: Maven (backend), npm/Angular CLI (frontend)
 
 ## 📋 Features
@@ -73,7 +73,7 @@ A comprehensive billing system for costume rental shops built with Spring Boot (
 
 ### Database
 
-The SQLite database will be automatically created as `costume_rental.db` in the backend directory when you first run the application.
+The PostgreSQL database needs to be set up before running the application. See the backend README for database setup instructions.
 
 ## 📊 Database Schema
 
@@ -210,11 +210,16 @@ Edit `application.properties` to modify:
 
 ### Common Issues
 1. **CORS Errors**: Ensure backend CORS is configured for frontend URL
-2. **Database Issues**: Check file permissions for SQLite database
+2. **Database Issues**: Check PostgreSQL connection and credentials
 3. **Port Conflicts**: Change ports in configuration files if needed
 
 ### Database Reset
-To reset the database, simply delete the `costume_rental.db` file and restart the backend.
+To reset the database, connect to PostgreSQL and drop/recreate the database:
+```sql
+DROP DATABASE costume_rental;
+CREATE DATABASE costume_rental;
+GRANT ALL PRIVILEGES ON DATABASE costume_rental TO costume_rental_user;
+```
 
 ## 📝 License
 

@@ -6,7 +6,7 @@ Spring Boot backend API for the costume rental billing system.
 
 - **Framework**: Spring Boot 3.2.0
 - **Language**: Java 17
-- **Database**: SQLite with Hibernate
+- **Database**: PostgreSQL with Hibernate
 - **Build Tool**: Maven
 - **API**: RESTful web services
 
@@ -46,25 +46,40 @@ backend/
 ### Prerequisites
 - Java 17 or higher
 - Maven 3.6+
+- PostgreSQL 12+ (or Docker for easy setup)
 
 ### Running the Application
 
-1. **Clone and navigate to backend:**
+1. **Set up PostgreSQL database:**
+   
+   **Option A: Using Docker (Recommended)**
+   ```bash
+   # From project root
+   docker-compose up -d
+   ```
+   
+   **Option B: Manual Setup**
+   ```bash
+   # Install PostgreSQL, then run:
+   psql -U postgres -f backend/setup-database.sql
+   ```
+
+2. **Clone and navigate to backend:**
    ```bash
    cd backend
    ```
 
-2. **Install dependencies:**
+3. **Install dependencies:**
    ```bash
    mvn clean install
    ```
 
-3. **Run the application:**
+4. **Run the application:**
    ```bash
    mvn spring-boot:run
    ```
 
-4. **Access the API:**
+5. **Access the API:**
    - Base URL: `http://localhost:8080/api`
    - Health check: `http://localhost:8080/api/actuator/health` (if actuator is enabled)
 
@@ -77,10 +92,22 @@ java -jar target/billing-system-0.0.1-SNAPSHOT.jar
 
 ## 🗄️ Database
 
-### SQLite Configuration
-- Database file: `costume_rental.db` (created automatically)
-- Hibernate DDL: `update` (creates/updates tables automatically)
-- SQL logging: Enabled in development
+### PostgreSQL Setup
+
+1. **Install PostgreSQL** (if not already installed):
+   - Download from https://www.postgresql.org/download/
+   - Or use Docker: `docker run --name costume-rental-db -e POSTGRES_PASSWORD=costume_rental_password -d -p 5432:5432 postgres`
+
+2. **Create Database and User**:
+   ```sql
+   CREATE DATABASE costume_rental;
+   CREATE USER costume_rental_user WITH PASSWORD 'costume_rental_password';
+   GRANT ALL PRIVILEGES ON DATABASE costume_rental TO costume_rental_user;
+   ```
+
+3. **Configuration**:
+   - Hibernate DDL: `update` (creates/updates tables automatically)
+   - Connection pooling optimized for concurrent access
 
 ### Entity Relationships
 ```
@@ -149,9 +176,11 @@ PUT    /bills/{id}/pay         # Mark as paid (query param: paymentMethod)
 ### Application Properties
 ```properties
 # Database
-spring.datasource.url=jdbc:sqlite:costume_rental.db
-spring.datasource.driver-class-name=org.sqlite.JDBC
-spring.jpa.database-platform=org.hibernate.community.dialect.SQLiteDialect
+spring.datasource.url=jdbc:postgresql://localhost:5432/costume_rental
+spring.datasource.username=costume_rental_user
+spring.datasource.password=costume_rental_password
+spring.datasource.driver-class-name=org.postgresql.Driver
+spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
 
 # JPA
 spring.jpa.hibernate.ddl-auto=update
@@ -203,10 +232,10 @@ Add Spring Boot DevTools dependency for hot reload during development:
 ```
 
 ### Database Inspection
-Use SQLite browser tools to inspect the database:
-- DB Browser for SQLite
-- SQLiteStudio
-- Command line: `sqlite3 costume_rental.db`
+Use PostgreSQL tools to inspect the database:
+- pgAdmin (GUI tool)
+- psql (command line): `psql -U costume_rental_user -d costume_rental`
+- DBeaver (Universal database tool)
 
 ### Logging
 Adjust logging levels in `application.properties`:
@@ -243,8 +272,7 @@ The API uses standard HTTP status codes:
 - `spring-boot-starter-web`: Web MVC framework
 - `spring-boot-starter-data-jpa`: JPA with Hibernate
 - `spring-boot-starter-validation`: Bean validation
-- `sqlite-jdbc`: SQLite database driver
-- `hibernate-community-dialects`: SQLite dialect for Hibernate
+- `postgresql`: PostgreSQL database driver
 
 ### Development Dependencies
 - `spring-boot-starter-test`: Testing framework
@@ -254,9 +282,10 @@ The API uses standard HTTP status codes:
 
 ### Common Issues
 
-1. **Database locked error:**
-   - Ensure no other process is using the database file
-   - Check file permissions
+1. **Database connection error:**
+   - Ensure PostgreSQL is running
+   - Check database credentials and connection string
+   - Verify database and user exist
 
 2. **CORS errors:**
    - Verify frontend URL in CORS configuration

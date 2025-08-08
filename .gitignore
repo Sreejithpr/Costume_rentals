@@ -28,10 +28,8 @@ backend/.classpath
 backend/application-*.properties
 backend/application-*.yml
 
-# Database files
+# Database files (if any local database files are created)
 *.db
-*.sqlite
-*.sqlite3
 costume_rental.db
 
 # Logs

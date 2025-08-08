@@ -64,19 +64,19 @@ import { Bill, BillStatus, PaymentMethod } from '../../models/bill.model';
       <mat-card class="summary-card">
         <mat-card-content>
           <h3>Total Pending</h3>
-          <p class="amount">\${{ getTotalAmount('PENDING') | number:'1.2-2' }}</p>
+                        <p class="amount">₹{{ getTotalAmount('PENDING') | number:'1.2-2' }}</p>
         </mat-card-content>
       </mat-card>
       <mat-card class="summary-card">
         <mat-card-content>
           <h3>Total Overdue</h3>
-          <p class="amount overdue">\${{ getTotalAmount('OVERDUE') | number:'1.2-2' }}</p>
+                        <p class="amount overdue">₹{{ getTotalAmount('OVERDUE') | number:'1.2-2' }}</p>
         </mat-card-content>
       </mat-card>
       <mat-card class="summary-card">
         <mat-card-content>
           <h3>Total Paid</h3>
-          <p class="amount paid">\${{ getTotalAmount('PAID') | number:'1.2-2' }}</p>
+                        <p class="amount paid">₹{{ getTotalAmount('PAID') | number:'1.2-2' }}</p>
         </mat-card-content>
       </mat-card>
     </div>
@@ -117,15 +117,15 @@ import { Bill, BillStatus, PaymentMethod } from '../../models/bill.model';
             <ng-container matColumnDef="amount">
               <th mat-header-cell *matHeaderCellDef>Total Amount</th>
               <td mat-cell *matCellDef="let bill">
-                <span class="currency">\${{ bill.totalAmount | number:'1.2-2' }}</span>
+                <span class="currency">₹{{ bill.totalAmount | number:'1.2-2' }}</span>
                 <div *ngIf="bill.lateFee && bill.lateFee > 0" class="fee-detail">
-                  <small class="late-fee">Late Fee: \${{ bill.lateFee | number:'1.2-2' }}</small>
+                  <small class="late-fee">Late Fee: ₹{{ bill.lateFee | number:'1.2-2' }}</small>
                 </div>
                 <div *ngIf="bill.damageFee && bill.damageFee > 0" class="fee-detail">
-                  <small class="damage-fee">Damage Fee: \${{ bill.damageFee | number:'1.2-2' }}</small>
+                  <small class="damage-fee">Damage Fee: ₹{{ bill.damageFee | number:'1.2-2' }}</small>
                 </div>
                 <div *ngIf="bill.discount && bill.discount > 0" class="fee-detail">
-                  <small class="discount">Discount: -\${{ bill.discount | number:'1.2-2' }}</small>
+                  <small class="discount">Discount: -₹{{ bill.discount | number:'1.2-2' }}</small>
                 </div>
               </td>
             </ng-container>
