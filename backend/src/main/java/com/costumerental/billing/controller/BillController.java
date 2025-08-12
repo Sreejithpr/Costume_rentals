@@ -1,7 +1,9 @@
 package com.costumerental.billing.controller;
 
 import com.costumerental.billing.model.Bill;
+import com.costumerental.billing.model.Rental;
 import com.costumerental.billing.service.BillingService;
+import com.costumerental.billing.service.RentalService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +21,9 @@ public class BillController {
     
     @Autowired
     private BillingService billingService;
+    
+    @Autowired
+    private RentalService rentalService;
     
     @GetMapping
     public List<Bill> getAllBills() {
@@ -78,6 +83,21 @@ public class BillController {
             return ResponseEntity.ok(bill);
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
+        }
+    }
+    
+    @PostMapping("/generate/{rentalId}")
+    public ResponseEntity<Bill> generateBill(@PathVariable Long rentalId) {
+        try {
+            Optional<Rental> rental = rentalService.getRentalById(rentalId);
+            if (rental.isPresent()) {
+                Bill bill = billingService.generateBill(rental.get());
+                return ResponseEntity.ok(bill);
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().build();
         }
     }
 }

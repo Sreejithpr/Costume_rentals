@@ -61,4 +61,8 @@ export class BillService {
 
     return this.http.put<Bill>(`${this.apiUrl}/${billId}/pay`, null, { params });
   }
+
+  generateBill(rentalId: number): Observable<Bill> {
+    return this.http.post<Bill>(`${this.apiUrl}/generate/${rentalId}`, null);
+  }
 }

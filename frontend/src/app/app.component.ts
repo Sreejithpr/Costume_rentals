@@ -42,10 +42,6 @@ import { ThemeService } from './services/theme.service';
           <mat-icon>assignment</mat-icon>
           <span>Rentals</span>
         </a>
-        <a mat-button routerLink="/bills" routerLinkActive="active-link" class="nav-item">
-          <mat-icon>receipt</mat-icon>
-          <span>Bills</span>
-        </a>
       </div>
       
       <div class="navbar-actions">

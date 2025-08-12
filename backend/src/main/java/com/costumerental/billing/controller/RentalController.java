@@ -53,10 +53,11 @@ public class RentalController {
             @RequestParam Long costumeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate rentalDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate expectedReturnDate,
-            @RequestParam(required = false) String notes) {
+            @RequestParam(required = false) String notes,
+            @RequestParam(required = false, defaultValue = "true") Boolean generateBill) {
         try {
             Rental rental = rentalService.createRental(customerId, costumeId, rentalDate, 
-                                                      expectedReturnDate, notes);
+                                                      expectedReturnDate, notes, generateBill);
             return ResponseEntity.status(HttpStatus.CREATED).body(rental);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().build();

@@ -18,15 +18,18 @@ import { MatBadgeModule } from '@angular/material/badge';
 import { MatTableDataSource } from '@angular/material/table';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 import { RentalService } from '../../services/rental.service';
 import { CustomerService } from '../../services/customer.service';
 import { CostumeService } from '../../services/costume.service';
+import { BillService } from '../../services/bill.service';
 import { Rental, RentalStatus, CreateRentalRequest } from '../../models/rental.model';
 import { Customer } from '../../models/customer.model';
 import { Costume } from '../../models/costume.model';
+import { Bill } from '../../models/bill.model';
 
 interface SelectedCostumeItem {
   costume: Costume;
@@ -64,37 +67,32 @@ interface CustomerRentalGroup {
     MatAutocompleteModule,
     MatBadgeModule,
     MatDialogModule,
-    MatDividerModule
+    MatDividerModule,
+    MatCheckboxModule
   ],
   template: `
     <div class="page-header">
       <h1 class="page-title">Rentals</h1>
-      <button mat-raised-button color="primary" (click)="showAddForm = !showAddForm">
-        <mat-icon>add</mat-icon>
-        New Rental
-      </button>
+      <div class="header-actions">
+        <button mat-stroked-button 
+                [color]="isGroupedView ? 'primary' : ''" 
+                (click)="toggleView(true)"
+                class="grouped-view-btn"
+                *ngIf="!showAddForm">
+          <mat-icon>group</mat-icon>
+          Grouped by Customer
+        </button>
+        <button mat-raised-button color="primary" (click)="showAddForm = !showAddForm">
+          <mat-icon>add</mat-icon>
+          New Rental
+        </button>
+      </div>
     </div>
 
-    <!-- View Toggle -->
-    <div class="view-toggle-section">
-      <button mat-stroked-button 
-              [color]="!isGroupedView ? 'primary' : ''" 
-              (click)="toggleView(false)"
-              class="view-toggle-btn">
-        <mat-icon>list</mat-icon>
-        Individual View
-      </button>
-      <button mat-stroked-button 
-              [color]="isGroupedView ? 'primary' : ''" 
-              (click)="toggleView(true)"
-              class="view-toggle-btn">
-        <mat-icon>group</mat-icon>
-        Grouped by Customer
-      </button>
-    </div>
 
-    <!-- Filter Buttons -->
-    <div class="action-buttons">
+
+    <!-- Filter Buttons - Only show when not in add form -->
+    <div class="action-buttons" *ngIf="!showAddForm">
       <button mat-button (click)="filterRentals('all')" 
               [class.active]="currentFilter === 'all'">
         All Rentals ({{ rentals.length }})
@@ -288,6 +286,21 @@ interface CustomerRentalGroup {
           </div>
         </div>
 
+        <!-- Step 1.5: Instructions for next step -->
+        <div class="rental-step" *ngIf="selectedCostumes.length === 0">
+          <h3>Next Step: Select Costumes</h3>
+          <div class="instruction-message">
+            <mat-icon>info</mat-icon>
+            <p>Please select costumes from the table above to proceed to customer details.</p>
+            <p><strong>How to select:</strong></p>
+            <ol>
+              <li>Choose a costume size by clicking on the size chips</li>
+              <li>Select quantity if needed</li>
+              <li>Click the <mat-icon>add</mat-icon> button to add to your selection</li>
+            </ol>
+          </div>
+        </div>
+
         <!-- Step 2: Customer & Rental Details -->
         <div class="rental-step" *ngIf="selectedCostumes.length > 0">
           <h3>Step 2: Customer & Rental Details</h3>
@@ -347,6 +360,14 @@ interface CustomerRentalGroup {
                 <textarea matInput formControlName="notes" rows="3" placeholder="Any special instructions or notes"></textarea>
                 <mat-icon matSuffix>note</mat-icon>
               </mat-form-field>
+              
+              <!-- Bill Generation Option -->
+              <div class="bill-generation-section">
+                <mat-checkbox formControlName="generateBillsImmediately" color="primary">
+                  <strong>Generate bills immediately after creating rentals</strong>
+                  <p class="checkbox-description">When checked, bills will be automatically generated and displayed for printing. You can also generate bills later from the Bills section.</p>
+                </mat-checkbox>
+              </div>
             </div>
             
             <div class="form-actions">
@@ -369,8 +390,109 @@ interface CustomerRentalGroup {
       </mat-card-content>
     </mat-card>
 
-    <!-- Rentals Table -->
-    <div class="table-container">
+    <!-- Bills Display Section -->
+    <mat-card *ngIf="showBills && createdBills.length > 0" class="bills-container">
+      <mat-card-header>
+        <mat-card-title>Generated Bills</mat-card-title>
+        <div class="bills-actions">
+          <button mat-raised-button color="primary" (click)="printAllBillsForCustomer()" class="print-customer-button">
+            <mat-icon>local_printshop</mat-icon>
+            Print & Give to Customer
+          </button>
+          <button mat-stroked-button (click)="printAllBills()" class="print-button">
+            <mat-icon>print</mat-icon>
+            Print All Bills
+          </button>
+          <button mat-stroked-button (click)="closeBills()" class="close-button">
+            <mat-icon>close</mat-icon>
+            Close Bills
+          </button>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="bills-grid">
+          <div *ngFor="let bill of createdBills" class="bill-card" id="bill-{{bill.id}}">
+            <div class="bill-header">
+              <h3>Bill #{{bill.id}}</h3>
+              <button mat-icon-button (click)="printBill(bill)" title="Print this bill">
+                <mat-icon>print</mat-icon>
+              </button>
+            </div>
+            <div class="bill-content">
+              <div class="customer-info">
+                <h4>Customer Details</h4>
+                <p><strong>Name:</strong> {{bill.rental.customer.firstName}}</p>
+                <p><strong>Phone:</strong> {{bill.rental.customer.phone}}</p>
+                <p *ngIf="bill.rental.customer.email"><strong>Email:</strong> {{bill.rental.customer.email}}</p>
+                <p *ngIf="bill.rental.customer.address"><strong>Address:</strong> {{bill.rental.customer.address}}</p>
+              </div>
+              <div class="rental-info">
+                <h4>Rental Details</h4>
+                <p><strong>Costume:</strong> {{bill.rental.costume.name}}</p>
+                <p><strong>Category:</strong> {{bill.rental.costume.category}}</p>
+                <p><strong>Rental Date:</strong> {{bill.rental.rentalDate | date:'dd/MM/yyyy'}}</p>
+                <p><strong>Expected Return:</strong> {{bill.rental.expectedReturnDate | date:'dd/MM/yyyy'}}</p>
+                <p *ngIf="bill.rental.notes"><strong>Notes:</strong> {{bill.rental.notes}}</p>
+              </div>
+              <div class="bill-info">
+                <h4>Bill Summary</h4>
+                <p><strong>Bill Date:</strong> {{bill.billDate | date:'dd/MM/yyyy HH:mm'}}</p>
+                <p><strong>Due Date:</strong> {{bill.dueDate | date:'dd/MM/yyyy'}}</p>
+                <p *ngIf="bill.lateFee && bill.lateFee > 0"><strong>Late Fee:</strong> ₹{{bill.lateFee}}</p>
+                <p *ngIf="bill.damageFee && bill.damageFee > 0"><strong>Damage Fee:</strong> ₹{{bill.damageFee}}</p>
+                <p *ngIf="bill.discount && bill.discount > 0"><strong>Discount:</strong> -₹{{bill.discount}}</p>
+                <p class="total-amount"><strong>Total Amount:</strong> ₹{{bill.totalAmount}}</p>
+                <p><strong>Status:</strong> <span class="status-{{bill.status.toLowerCase()}}">{{bill.status}}</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Rental Print Section -->
+    <mat-card *ngIf="showRentalPrint && createdRentals.length > 0" class="rental-print-container">
+      <mat-card-header>
+        <mat-card-title>Created Rentals - Ready for Print</mat-card-title>
+        <div class="rental-print-actions">
+          <button mat-stroked-button (click)="printRentalSummary()" class="print-summary-button">
+            <mat-icon>receipt</mat-icon>
+            Print Summary
+          </button>
+          <button mat-stroked-button (click)="closeRentalPrint()" class="close-button">
+            <mat-icon>close</mat-icon>
+            Close
+          </button>
+        </div>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="rental-summary">
+          <h3>Rental Summary</h3>
+          <p><strong>Customer:</strong> {{ createdRentals[0].customer.firstName }} ({{ createdRentals[0].customer.phone }})</p>
+          <p><strong>Total Rentals:</strong> {{ createdRentals.length }}</p>
+          <p><strong>Rental Date:</strong> {{ createdRentals[0].rentalDate | date:'MMM dd, yyyy' }}</p>
+          <p><strong>Expected Return:</strong> {{ createdRentals[0].expectedReturnDate | date:'MMM dd, yyyy' }}</p>
+        </div>
+        
+        <div class="rental-items-grid">
+          <div *ngFor="let rental of createdRentals" class="rental-item-card" id="rental-{{rental.id}}">
+            <div class="rental-item-header">
+              <h4>Rental #{{ rental.id }}</h4>
+            </div>
+            <div class="rental-item-details">
+              <p><strong>Costume:</strong> {{ rental.costume.name }}</p>
+              <p><strong>Category:</strong> {{ rental.costume.category }}</p>
+              <p><strong>Daily Price:</strong> ₹{{ rental.costume.sellPrice }}</p>
+              <p><strong>Status:</strong> {{ rental.status }}</p>
+              <p *ngIf="rental.notes"><strong>Notes:</strong> {{ rental.notes }}</p>
+            </div>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Rentals Table - Hidden when showAddForm is true -->
+    <div class="table-container" *ngIf="!showAddForm">
       <mat-card>
         <mat-card-content>
           <div *ngIf="loading" class="loading-container">
@@ -557,6 +679,40 @@ interface CustomerRentalGroup {
       </mat-card>
     </div>
 
+
+
+    <!-- Quick Stats Summary - Only show when in add form -->
+    <div class="rentals-summary-container" *ngIf="showAddForm">
+      <mat-card>
+        <mat-card-content>
+          <div class="summary-message">
+            <mat-icon>info</mat-icon>
+            <h3>Creating New Rental</h3>
+            <p>Fill out the form below to create a new rental. The rental table is hidden while creating new rentals.</p>
+          </div>
+          
+          <div class="quick-stats" *ngIf="rentals.length > 0">
+            <div class="stat-item">
+              <span class="stat-number">{{ getTotalActiveRentals() }}</span>
+              <span class="stat-label">Active Rentals</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">{{ getTotalReturnedRentals() }}</span>
+              <span class="stat-label">Returned</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">{{ getTotalOverdueRentals() }}</span>
+              <span class="stat-label">Overdue</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">₹{{ getTotalRentalRevenue() | number:'1.2-2' }}</span>
+              <span class="stat-label">Total Revenue</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
     <!-- Rental Details Dialog Template -->
     <ng-template #rentalDetailsDialog let-data>
       <div class="rental-details-dialog">
@@ -705,6 +861,124 @@ interface CustomerRentalGroup {
         </mat-dialog-actions>
       </div>
     </ng-template>
+
+    <!-- Customer Rentals Dialog Template -->
+    <ng-template #customerRentalsDialog let-data>
+      <div class="customer-rentals-dialog">
+        <div mat-dialog-title class="dialog-header">
+          <div class="dialog-title-content">
+            <mat-icon class="dialog-icon">person</mat-icon>
+            <h2>Created Rentals - Ready for Print</h2>
+          </div>
+          <div class="header-actions">
+            <button mat-stroked-button 
+                    (click)="printRentalSummaryForCustomer(data.rentals, data.customer)"
+                    class="print-summary-btn">
+              <mat-icon>description</mat-icon>
+              Print Summary
+            </button>
+            <button mat-icon-button mat-dialog-close class="close-button">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        </div>
+
+        <mat-dialog-content class="dialog-content">
+          <!-- Rental Summary Section -->
+          <div class="rental-summary-section">
+            <h3>Rental Summary</h3>
+            <div class="summary-grid">
+              <div class="summary-item">
+                <span class="summary-label">Customer:</span>
+                <span class="summary-value">{{ data.customer?.firstName }} ({{ data.customer?.phone }})</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Total Rentals:</span>
+                <span class="summary-value">{{ data.rentals.length }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Rental Date:</span>
+                <span class="summary-value">{{ data.rentals[0]?.rentalDate | date:'MMM dd, yyyy' }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Expected Return:</span>
+                <span class="summary-value">{{ data.rentals[0]?.expectedReturnDate | date:'MMM dd, yyyy' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rentals Table -->
+          <div class="rentals-table-container">
+            <table mat-table [dataSource]="data.rentals" class="customer-rentals-table">
+              
+              <!-- Rental ID Column -->
+              <ng-container matColumnDef="rentalId">
+                <th mat-header-cell *matHeaderCellDef>Rental #</th>
+                <td mat-cell *matCellDef="let rental">
+                  <div class="rental-id">Rental #{{ rental.id }}</div>
+                </td>
+              </ng-container>
+
+              <!-- Costume Column -->
+              <ng-container matColumnDef="costume">
+                <th mat-header-cell *matHeaderCellDef>Costume</th>
+                <td mat-cell *matCellDef="let rental">
+                  <div class="costume-info">
+                    <div class="costume-name">{{ rental.costume?.name || 'Unknown' }}</div>
+                    <div class="costume-details">
+                      <span class="category">{{ rental.costume?.category }}</span>
+                      <span class="size" *ngIf="rental.costume?.size"> - Size: {{ rental.costume.size }}</span>
+                    </div>
+                  </div>
+                </td>
+              </ng-container>
+
+              <!-- Daily Price Column -->
+              <ng-container matColumnDef="dailyPrice">
+                <th mat-header-cell *matHeaderCellDef>Daily Price</th>
+                <td mat-cell *matCellDef="let rental">
+                  <div class="price-info">₹{{ rental.costume?.sellPrice | number:'1.2-2' }}</div>
+                </td>
+              </ng-container>
+
+              <!-- Status Column -->
+              <ng-container matColumnDef="status">
+                <th mat-header-cell *matHeaderCellDef>Status</th>
+                <td mat-cell *matCellDef="let rental">
+                  <mat-chip [class]="getStatusClass(rental.status)" class="status-chip">
+                    {{ rental.status }}
+                  </mat-chip>
+                </td>
+              </ng-container>
+
+              <!-- Notes Column -->
+              <ng-container matColumnDef="notes">
+                <th mat-header-cell *matHeaderCellDef>Notes</th>
+                <td mat-cell *matCellDef="let rental">
+                  <div class="notes-cell">
+                    {{ rental.notes || '-' }}
+                    <div class="costume-notes" *ngIf="rental.costume?.size">
+                      Size: {{ rental.costume.size }}
+                    </div>
+                  </div>
+                </td>
+              </ng-container>
+
+              <!-- Table Headers and Rows -->
+              <tr mat-header-row *matHeaderRowDef="customerRentalsDisplayedColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: customerRentalsDisplayedColumns;" class="rental-row"></tr>
+            </table>
+          </div>
+        </mat-dialog-content>
+
+        <mat-dialog-actions class="dialog-actions">
+          <button mat-stroked-button mat-dialog-close class="close-btn">
+            <mat-icon>close</mat-icon>
+            Close
+          </button>
+        </mat-dialog-actions>
+      </div>
+    </ng-template>
   `,
   styles: [`
     .form-container {
@@ -726,6 +1000,72 @@ interface CustomerRentalGroup {
     .action-buttons button.active {
       background-color: #3f51b5;
       color: white;
+    }
+
+    /* Header Styles */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding: 20px 0;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .page-title {
+      color: #333;
+      font-size: 2em;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+    }
+
+    .grouped-view-btn {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-6);
+      border-radius: var(--radius-lg);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: all 0.3s ease;
+      border: 2px solid var(--primary-color);
+      color: var(--primary-color);
+    }
+
+    .grouped-view-btn[color="primary"] {
+      background: var(--primary-color);
+      color: white;
+      box-shadow: 0 4px 12px rgba(0, 122, 142, 0.3);
+    }
+
+    .grouped-view-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 122, 142, 0.25);
+    }
+
+    @media (max-width: 768px) {
+      .page-header {
+        flex-direction: column;
+        gap: var(--space-4);
+        align-items: stretch;
+      }
+
+      .header-actions {
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .grouped-view-btn {
+        width: auto;
+        justify-content: center;
+      }
     }
 
     .form-row {
@@ -760,6 +1100,49 @@ interface CustomerRentalGroup {
       border-radius: 8px;
       background-color: var(--background-secondary);
       min-height: 200px;
+    }
+
+    .instruction-message {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 20px;
+      background: linear-gradient(135deg, #e8f4f8, #f0f8ff);
+      border-radius: 8px;
+      border: 1px solid rgba(0, 122, 142, 0.2);
+    }
+
+    .instruction-message mat-icon {
+      font-size: 48px;
+      width: 48px;
+      height: 48px;
+      color: var(--primary-color);
+      margin-bottom: 16px;
+    }
+
+    .instruction-message p {
+      margin: 8px 0;
+      color: var(--text-primary);
+    }
+
+    .instruction-message ol {
+      text-align: left;
+      margin: 16px 0;
+      padding-left: 20px;
+    }
+
+    .instruction-message ol li {
+      margin: 8px 0;
+      color: var(--text-secondary);
+    }
+
+    .instruction-message ol li mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      vertical-align: middle;
+      margin: 0 4px;
     }
 
     .rental-step h3 {
@@ -1017,6 +1400,26 @@ interface CustomerRentalGroup {
 
     .form-actions button mat-spinner {
       margin-right: 8px;
+    }
+
+    /* Bill Generation Section */
+    .bill-generation-section {
+      margin-top: 20px;
+      padding: 15px;
+      background: rgba(0, 122, 142, 0.05);
+      border: 1px solid rgba(0, 122, 142, 0.2);
+      border-radius: 8px;
+    }
+
+    .bill-generation-section .mat-mdc-checkbox {
+      margin-bottom: 0;
+    }
+
+    .checkbox-description {
+      margin: 8px 0 0 32px;
+      font-size: 14px;
+      color: #666;
+      line-height: 1.4;
     }
 
     /* Large Screen Optimization */
@@ -1565,10 +1968,650 @@ interface CustomerRentalGroup {
     .grouped-data-row:hover {
       background-color: #f0f8ff !important;
     }
+
+    /* Bills Styles */
+    .bills-container {
+      margin-bottom: 30px;
+      border: 2px solid #007A8E;
+    }
+
+    .bills-container mat-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      background: linear-gradient(135deg, #007A8E, #016BD1);
+      color: white;
+    }
+
+    .bills-container mat-card-title {
+      color: white !important;
+      margin: 0;
+    }
+
+    .bills-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .bills-actions button {
+      color: white;
+      border-color: white;
+    }
+
+    .print-customer-button {
+      background: linear-gradient(135deg, #00B2A9, #FDF958) !important;
+      color: #333 !important;
+      font-weight: 600 !important;
+      border: none !important;
+    }
+
+    .print-customer-button:hover {
+      background: linear-gradient(135deg, #FDF958, #00B2A9) !important;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 178, 169, 0.3);
+    }
+
+    .bills-grid {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    }
+
+    .bill-card {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px;
+      background: #fafafa;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: box-shadow 0.3s ease;
+    }
+
+    .bill-card:hover {
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .bill-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #007A8E;
+    }
+
+    .bill-header h3 {
+      margin: 0;
+      color: #007A8E;
+      font-size: 18px;
+    }
+
+    .bill-content {
+      display: grid;
+      gap: 16px;
+    }
+
+    .customer-info, .rental-info, .bill-info {
+      background: white;
+      padding: 12px;
+      border-radius: 6px;
+      border-left: 4px solid #007A8E;
+    }
+
+    .customer-info h4, .rental-info h4, .bill-info h4 {
+      margin: 0 0 8px 0;
+      color: #016BD1;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .customer-info p, .rental-info p, .bill-info p {
+      margin: 4px 0;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .total-amount {
+      font-size: 16px !important;
+      font-weight: bold;
+      color: #016BD1 !important;
+      background: #e8f4f8;
+      padding: 8px;
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    .status-pending {
+      color: #f57c00;
+      font-weight: bold;
+    }
+
+    .status-paid {
+      color: #2e7d32;
+      font-weight: bold;
+    }
+
+    .status-overdue {
+      color: #d32f2f;
+      font-weight: bold;
+    }
+
+    /* Rental Print Section */
+    .rental-print-container {
+      background: #f8f9fa;
+      border: 2px solid #007A8E;
+      margin: 20px 0;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 122, 142, 0.1);
+    }
+
+    .rental-print-container mat-card-header {
+      background: linear-gradient(135deg, #007A8E 0%, #00B2A9 100%);
+      color: white;
+      border-radius: 10px 10px 0 0;
+      padding: 20px;
+    }
+
+    .rental-print-container mat-card-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .rental-print-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 15px;
+    }
+
+    .print-rental-button {
+      background: #FDF958 !important;
+      color: #007A8E !important;
+      font-weight: 600;
+    }
+
+    .print-summary-button {
+      color: white !important;
+      border-color: rgba(255, 255, 255, 0.5) !important;
+    }
+
+    .rental-summary {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #007A8E;
+    }
+
+    .rental-summary h3 {
+      color: #007A8E;
+      margin-top: 0;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+
+    .rental-summary p {
+      margin: 8px 0;
+      font-size: 14px;
+    }
+
+    .rental-items-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .rental-item-card {
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .rental-item-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .rental-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #e0e0e0;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .rental-item-header h4 {
+      color: #007A8E;
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .rental-item-details p {
+      margin: 6px 0;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    /* Responsive Design for Rental Print */
+    @media (max-width: 768px) {
+      .rental-items-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .rental-print-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      .rental-print-actions button {
+        width: 100%;
+        margin: 5px 0;
+      }
+      
+      .rental-summary {
+        padding: 15px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .bills-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .bills-actions {
+        flex-direction: column;
+        width: 100%;
+      }
+      
+      .bills-container mat-card-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+      }
+    }
+
+    /* Rentals Summary Section Styling */
+    .rentals-summary-container {
+      margin-bottom: var(--space-6);
+    }
+
+    .summary-message {
+      text-align: center;
+      padding: var(--space-8);
+      background: linear-gradient(135deg, var(--background-secondary), var(--accent-cream));
+      border-radius: var(--radius-lg);
+      border: 2px solid var(--border-color);
+      margin-bottom: var(--space-6);
+    }
+
+    .summary-message mat-icon {
+      font-size: 3rem;
+      width: 3rem;
+      height: 3rem;
+      color: var(--primary-color);
+      margin-bottom: var(--space-4);
+    }
+
+    .summary-message h3 {
+      color: var(--text-primary);
+      font-family: var(--font-editorial);
+      font-size: var(--font-size-h4);
+      margin-bottom: var(--space-3);
+    }
+
+    .summary-message p {
+      color: var(--text-secondary);
+      font-size: var(--font-size-base);
+      margin: 0;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--space-6);
+      margin-top: var(--space-6);
+    }
+
+    .stat-item {
+      text-align: center;
+      padding: var(--space-6);
+      background: var(--background-primary);
+      border-radius: var(--radius-lg);
+      border: 2px solid var(--border-color);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-item::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .stat-item:hover {
+      transform: translateY(-4px) scale(1.02);
+      border-color: var(--primary-color);
+      box-shadow: 0 8px 25px rgba(0, 122, 142, 0.15), var(--shadow-lg);
+    }
+
+    .stat-item:hover::before {
+      opacity: 1;
+    }
+
+    .stat-item:nth-child(1)::before {
+      background: linear-gradient(90deg, var(--success-color), var(--primary-light));
+    }
+
+    .stat-item:nth-child(2)::before {
+      background: linear-gradient(90deg, var(--info-color), var(--secondary-color));
+    }
+
+    .stat-item:nth-child(3)::before {
+      background: linear-gradient(90deg, var(--error-color), var(--warning-color));
+    }
+
+    .stat-item:nth-child(4)::before {
+      background: linear-gradient(90deg, var(--accent-gold), var(--accent-purple));
+    }
+
+    .stat-number {
+      font-family: var(--font-editorial);
+      font-size: var(--font-size-3xl);
+      font-weight: 800;
+      color: var(--primary-color);
+      margin-bottom: var(--space-2);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-family: var(--font-body);
+      font-size: var(--font-size-sm);
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: var(--letter-spacing-wide);
+    }
+
+    @media (max-width: 768px) {
+      .quick-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-4);
+      }
+
+      .stat-item {
+        padding: var(--space-4);
+      }
+
+      .stat-number {
+        font-size: var(--font-size-2xl);
+      }
+
+      .stat-label {
+        font-size: var(--font-size-xs);
+      }
+    }
+
+
+
+    /* Customer Rentals Dialog Styling */
+    .customer-rentals-dialog {
+      min-height: 600px;
+    }
+
+    .customer-rentals-dialog .dialog-header {
+      background: linear-gradient(135deg, #007A8E, #016BD1);
+      color: white;
+      padding: var(--space-6);
+      margin: calc(-1 * var(--space-6));
+      margin-bottom: var(--space-6);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+
+    .customer-rentals-dialog .dialog-title-content {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    .customer-rentals-dialog .dialog-title-content h2 {
+      margin: 0;
+      font-size: var(--font-size-xl);
+      font-weight: 700;
+    }
+
+    .customer-rentals-dialog .dialog-icon {
+      font-size: 2rem;
+      color: var(--accent-color);
+    }
+
+    .customer-rentals-dialog .header-actions {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+    }
+
+    .customer-rentals-dialog .print-summary-btn {
+      background: var(--accent-color);
+      color: var(--text-dark);
+      font-weight: 600;
+      padding: var(--space-3) var(--space-6);
+      border-radius: var(--radius-md);
+      border: none;
+      transition: all 0.3s ease;
+    }
+
+    .customer-rentals-dialog .print-summary-btn:hover {
+      background: var(--accent-light);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(253, 249, 88, 0.3);
+    }
+
+    .customer-rentals-dialog .close-button {
+      color: white;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .customer-rentals-dialog .close-button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .customer-rentals-dialog .dialog-content {
+      padding: 0;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .rental-summary-section {
+      background: linear-gradient(135deg, #f8f9fa, #e8f4f8);
+      padding: var(--space-6);
+      border-radius: var(--radius-lg);
+      margin-bottom: var(--space-6);
+      border: 1px solid rgba(0, 122, 142, 0.1);
+    }
+
+    .rental-summary-section h3 {
+      margin: 0 0 var(--space-4) 0;
+      color: var(--primary-color);
+      font-size: var(--font-size-lg);
+      font-weight: 600;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--space-4);
+    }
+
+    .summary-item {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+    }
+
+    .summary-label {
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .summary-value {
+      font-size: var(--font-size-base);
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
+    .rentals-table-container {
+      background: white;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid rgba(0, 122, 142, 0.1);
+    }
+
+    .customer-rentals-table {
+      width: 100%;
+    }
+
+    .customer-rentals-table .mat-mdc-header-cell {
+      background: linear-gradient(135deg, #007A8E, #016BD1);
+      color: white;
+      font-weight: 700;
+      font-size: var(--font-size-sm);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: var(--space-4);
+      border-bottom: none;
+    }
+
+    .customer-rentals-table .mat-mdc-cell {
+      padding: var(--space-4);
+      border-bottom: 1px solid rgba(0, 122, 142, 0.1);
+    }
+
+    .customer-rentals-table .rental-row {
+      transition: all 0.3s ease;
+    }
+
+    .customer-rentals-table .rental-row:hover {
+      background: rgba(0, 178, 169, 0.05);
+    }
+
+    .rental-id {
+      font-weight: 700;
+      color: var(--primary-color);
+      font-size: var(--font-size-base);
+    }
+
+    .costume-info .costume-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: var(--space-1);
+    }
+
+    .costume-info .costume-details {
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+    }
+
+    .costume-info .category {
+      color: var(--secondary-color);
+      font-weight: 500;
+    }
+
+    .costume-info .size {
+      color: var(--text-tertiary);
+    }
+
+    .price-info {
+      font-weight: 700;
+      color: var(--secondary-color);
+      font-size: var(--font-size-base);
+    }
+
+    .notes-cell {
+      max-width: 150px;
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+    }
+
+    .costume-notes {
+      margin-top: var(--space-1);
+      font-style: italic;
+      color: var(--text-tertiary);
+    }
+
+    .customer-rentals-dialog .dialog-actions {
+      padding: var(--space-6);
+      border-top: 1px solid rgba(0, 122, 142, 0.1);
+      background: linear-gradient(135deg, #f8f9fa, #e8f4f8);
+      justify-content: center;
+    }
+
+    .customer-rentals-dialog .close-btn {
+      padding: var(--space-3) var(--space-8);
+      border: 2px solid var(--primary-color);
+      color: var(--primary-color);
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .customer-rentals-dialog .close-btn:hover {
+      background: var(--primary-color);
+      color: white;
+      transform: translateY(-2px);
+    }
+
+    @media (max-width: 768px) {
+      .customer-rentals-dialog .header-actions {
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+
+      .customer-rentals-dialog .print-summary-btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .customer-rentals-table {
+        font-size: var(--font-size-sm);
+      }
+
+      .customer-rentals-table .mat-mdc-cell,
+      .customer-rentals-table .mat-mdc-header-cell {
+        padding: var(--space-2);
+      }
+    }
   `]
 })
 export class RentalsComponent implements OnInit {
   @ViewChild('rentalDetailsDialog') rentalDetailsDialog!: TemplateRef<any>;
+  @ViewChild('customerRentalsDialog') customerRentalsDialog!: TemplateRef<any>;
   
   rentals: Rental[] = [];
   filteredRentals: Rental[] = [];
@@ -1580,14 +2623,15 @@ export class RentalsComponent implements OnInit {
   displayedColumns: string[] = ['customer', 'costume', 'rentalDate', 'expectedReturn', 'actualReturn', 'status', 'actions'];
   simpleDisplayedColumns: string[] = ['id', 'customer', 'costume', 'rentalDate', 'expectedReturn', 'actualReturn', 'status', 'actions'];
   groupedDisplayedColumns: string[] = ['customer', 'rentals', 'totalAmount', 'actions'];
+  customerRentalsDisplayedColumns: string[] = ['rentalId', 'costume', 'dailyPrice', 'status', 'notes'];
   rentalForm: FormGroup;
   
   // Add MatTableDataSource for better table handling
   dataSource = new MatTableDataSource<Rental>([]);
   groupedDataSource = new MatTableDataSource<CustomerRentalGroup>([]);
   
-  // View mode toggle
-  isGroupedView = false;
+  // View mode toggle (only grouped view available)
+  isGroupedView = true;
   
   // New properties for search and selection
   searchControl = new FormControl('');
@@ -1602,29 +2646,46 @@ export class RentalsComponent implements OnInit {
   selectedCostume: Costume | null = null;
   selectedSize: string = '';
   selectedQuantity: number = 1;
+  
+  // Bills state
+  createdBills: Bill[] = [];
+  showBills = false;
+  
+  // Rental printing state
+  createdRentals: Rental[] = [];
+  showRentalPrint = false;
 
   constructor(
     private rentalService: RentalService,
     private customerService: CustomerService,
     private costumeService: CostumeService,
+    private billService: BillService,
     private fb: FormBuilder,
     private snackBar: MatSnackBar,
     private cdr: ChangeDetectorRef,
     private dialog: MatDialog
   ) {
+    // Set default expected return date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
     this.rentalForm = this.fb.group({
       firstName: ['', Validators.required],
       phone: ['', Validators.required],
       email: [''],
       address: [''],
       rentalDate: [new Date(), Validators.required],
-      expectedReturnDate: ['', Validators.required],
-      notes: ['']
+      expectedReturnDate: [tomorrow, Validators.required],
+      notes: [''],
+      generateBillsImmediately: [true] // Default to true for convenience
     });
   }
 
   ngOnInit() {
     console.log('RentalsComponent ngOnInit called');
+    console.log('Initial rentalForm state:', this.rentalForm.value);
+    console.log('Form valid:', this.rentalForm.valid);
+    console.log('Form errors:', this.rentalForm.errors);
     this.loadData();
     this.setupSearchFunctionality();
   }
@@ -1645,6 +2706,12 @@ export class RentalsComponent implements OnInit {
         this.dataSource.data = rentals;
         
         this.filterRentals(this.currentFilter);
+        
+        // Always show grouped view since individual view is removed
+        if (this.isGroupedView) {
+          this.groupRentalsByCustomer();
+        }
+        
         this.loading = false;
       },
       error: (error) => {
@@ -1884,12 +2951,32 @@ export class RentalsComponent implements OnInit {
       this.loadAvailableCostumes(); // Refresh available costumes
       this.loadCustomers(); // Refresh customers list
       
+      // IMPORTANT: Get the bill generation setting BEFORE resetting the form
+      const shouldGenerateBills = this.rentalForm.get('generateBillsImmediately')?.value;
+      console.log(`Bill generation setting:`, shouldGenerateBills);
+      
+      // Store created rentals for printing
+      this.createdRentals = [...successfulRentals];
+      this.showRentalPrint = true;
+      
       this.resetFormAndClose();
       
       if (successfulRentals.length === requests.length) {
-        this.snackBar.open(`Customer created and all ${successfulRentals.length} rentals created successfully`, 'Close', { duration: 4000 });
+        if (shouldGenerateBills === true) {
+          // Fetch bills for the successful rentals and display them
+          this.fetchAndDisplayBills(successfulRentals);
+          this.snackBar.open(`Customer created and all ${successfulRentals.length} rentals created successfully. Bills generated!`, 'Close', { duration: 4000 });
+        } else {
+          this.snackBar.open(`Customer created and all ${successfulRentals.length} rentals created successfully. You can generate bills later from the Bills section.`, 'Close', { duration: 4000 });
+        }
       } else if (successfulRentals.length > 0) {
-        this.snackBar.open(`Customer created and ${successfulRentals.length} out of ${requests.length} rentals created successfully`, 'Close', { duration: 5000 });
+        if (shouldGenerateBills === true) {
+          // Fetch bills for the successful rentals and display them
+          this.fetchAndDisplayBills(successfulRentals);
+          this.snackBar.open(`Customer created and ${successfulRentals.length} out of ${requests.length} rentals created successfully. Bills generated!`, 'Close', { duration: 5000 });
+        } else {
+          this.snackBar.open(`Customer created and ${successfulRentals.length} out of ${requests.length} rentals created successfully. You can generate bills later from the Bills section.`, 'Close', { duration: 5000 });
+        }
       } else {
         this.snackBar.open(`Customer created but failed to create any rentals. Please check backend connection.`, 'Close', { duration: 6000 });
       }
@@ -1899,9 +2986,11 @@ export class RentalsComponent implements OnInit {
     }
 
     const request = requests[index];
+    const shouldGenerateBill = this.rentalForm.get('generateBillsImmediately')?.value;
     console.log(`Creating rental ${index + 1}/${requests.length}:`, request);
+    console.log(`Bill generation option:`, shouldGenerateBill);
     
-    this.rentalService.createRental(request).subscribe({
+    this.rentalService.createRental(request, shouldGenerateBill).subscribe({
       next: (rental) => {
         console.log(`Rental ${index + 1} created successfully:`, rental);
         successfulRentals.push(rental);
@@ -1929,6 +3018,1117 @@ export class RentalsComponent implements OnInit {
   createRental() {
     // Keep the old method for backwards compatibility, but redirect to new method
     this.createMultipleRentals();
+  }
+
+  fetchAndDisplayBills(rentals: Rental[]) {
+    // Get the customer ID from the first rental (all rentals should be for the same customer)
+    if (rentals.length > 0) {
+      const customerId = rentals[0].customer.id!;
+      const rentalIds = rentals.map(r => r.id);
+      
+      console.log('Fetching bills for rentals:', rentalIds);
+      
+      // Add a small delay to ensure bills are generated on the backend
+      setTimeout(() => {
+        this.billService.getBillsByCustomer(customerId).subscribe({
+          next: (bills) => {
+            console.log('All bills for customer:', bills);
+            // Filter bills to only show the ones for the newly created rentals
+            this.createdBills = bills.filter(bill => rentalIds.includes(bill.rental.id));
+            console.log('Filtered bills for new rentals:', this.createdBills);
+            
+            if (this.createdBills.length > 0) {
+              this.showBills = true;
+              this.snackBar.open(`${this.createdBills.length} bills generated and ready for printing!`, 'Close', { duration: 3000 });
+            } else {
+              // If no bills found, try to generate them manually
+              console.warn('No bills found for the created rentals, generating them manually...');
+              this.generateMissingBills(rentals);
+            }
+          },
+          error: (error) => {
+            console.error('Error fetching bills:', error);
+            this.snackBar.open('Rentals created successfully, but could not fetch bills', 'Close', { duration: 3000 });
+          }
+        });
+      }, 1000); // 1 second delay to ensure bills are generated
+    }
+  }
+
+  generateMissingBills(rentals: Rental[]) {
+    console.log('Generating bills for rentals:', rentals.map(r => r.id));
+    
+    // Generate bills sequentially
+    this.generateBillsSequentially(rentals, 0, []);
+  }
+
+  generateBillsSequentially(rentals: Rental[], index: number, generatedBills: Bill[]) {
+    if (index >= rentals.length) {
+      // All bills processed
+      if (generatedBills.length > 0) {
+        this.createdBills = generatedBills;
+        this.showBills = true;
+        this.snackBar.open(`${generatedBills.length} bills generated and ready for printing!`, 'Close', { duration: 3000 });
+      } else {
+        this.snackBar.open('Rentals created but could not generate bills. Please check the Bills section.', 'Close', { duration: 4000 });
+      }
+      return;
+    }
+
+    const rental = rentals[index];
+    this.billService.generateBill(rental.id!).subscribe({
+      next: (bill) => {
+        console.log(`Bill generated for rental ${rental.id}:`, bill);
+        generatedBills.push(bill);
+        this.generateBillsSequentially(rentals, index + 1, generatedBills);
+      },
+      error: (error) => {
+        console.error(`Error generating bill for rental ${rental.id}:`, error);
+        // Continue with next rental even if this one fails
+        this.generateBillsSequentially(rentals, index + 1, generatedBills);
+      }
+    });
+  }
+
+  printBill(bill: Bill) {
+    const printContent = this.generateBillPrintContent(bill);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  }
+
+  printAllBills() {
+    if (this.createdBills.length === 0) return;
+    
+    let allBillsContent = this.generateAllBillsPrintContent(this.createdBills);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(allBillsContent);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  }
+
+  printAllBillsForCustomer() {
+    if (this.createdBills.length === 0) return;
+    
+    // Generate customer-friendly version with additional instructions
+    let customerBillsContent = this.generateCustomerBillsPrintContent(this.createdBills);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(customerBillsContent);
+      printWindow.document.close();
+      printWindow.print();
+      
+      // Show success message
+      this.snackBar.open(`${this.createdBills.length} bill(s) ready for customer`, 'Close', { duration: 3000 });
+    }
+  }
+
+  generateBillPrintContent(bill: Bill): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Bill #${bill.id}</title>
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            color: #333;
+            background: white;
+          }
+          .bill-container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px;
+            border: 2px solid #007A8E;
+            border-radius: 8px;
+          }
+          .header { 
+            text-align: center; 
+            margin-bottom: 30px;
+            border-bottom: 3px solid #007A8E;
+            padding-bottom: 20px;
+          }
+          .header h1 { 
+            color: #007A8E; 
+            font-size: 28px;
+            margin: 0;
+          }
+          .header h2 { 
+            color: #016BD1; 
+            font-size: 20px;
+            margin: 5px 0;
+          }
+          .bill-info { 
+            margin-bottom: 20px; 
+            text-align: center;
+          }
+          .section { 
+            margin-bottom: 25px; 
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+          }
+          .section h3 { 
+            color: #007A8E; 
+            margin-top: 0;
+            border-bottom: 1px solid #007A8E;
+            padding-bottom: 5px;
+          }
+          .section p { 
+            margin: 8px 0; 
+            line-height: 1.4;
+          }
+          .total { 
+            font-size: 18px; 
+            font-weight: bold; 
+            color: #016BD1;
+            text-align: center;
+            padding: 15px;
+            background: #e8f4f8;
+            border-radius: 5px;
+            margin-top: 20px;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            font-size: 12px; 
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+          }
+          @media print {
+            body { margin: 0; }
+            .bill-container { border: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="bill-container">
+          <div class="header">
+            <h1>Costume Rental Bill</h1>
+            <h2>Bill #${bill.id}</h2>
+          </div>
+          
+          <div class="bill-info">
+            <p><strong>Bill Date:</strong> ${new Date(bill.billDate).toLocaleDateString('en-IN')}</p>
+            <p><strong>Due Date:</strong> ${bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('en-IN') : 'Not set'}</p>
+          </div>
+
+          <div class="section">
+            <h3>Customer Information</h3>
+            <p><strong>Name:</strong> ${bill.rental.customer.firstName}</p>
+            <p><strong>Phone:</strong> ${bill.rental.customer.phone}</p>
+            ${bill.rental.customer.email ? `<p><strong>Email:</strong> ${bill.rental.customer.email}</p>` : ''}
+            ${bill.rental.customer.address ? `<p><strong>Address:</strong> ${bill.rental.customer.address}</p>` : ''}
+          </div>
+
+          <div class="section">
+            <h3>Rental Details</h3>
+            <p><strong>Costume:</strong> ${bill.rental.costume.name}</p>
+            <p><strong>Category:</strong> ${bill.rental.costume.category}</p>
+            <p><strong>Rental Date:</strong> ${new Date(bill.rental.rentalDate).toLocaleDateString('en-IN')}</p>
+            <p><strong>Expected Return Date:</strong> ${new Date(bill.rental.expectedReturnDate).toLocaleDateString('en-IN')}</p>
+            ${bill.rental.notes ? `<p><strong>Notes:</strong> ${bill.rental.notes}</p>` : ''}
+          </div>
+
+          <div class="section">
+            <h3>Bill Summary</h3>
+            ${bill.lateFee && bill.lateFee > 0 ? `<p><strong>Late Fee:</strong> ₹${bill.lateFee}</p>` : ''}
+            ${bill.damageFee && bill.damageFee > 0 ? `<p><strong>Damage Fee:</strong> ₹${bill.damageFee}</p>` : ''}
+            ${bill.discount && bill.discount > 0 ? `<p><strong>Discount:</strong> -₹${bill.discount}</p>` : ''}
+            <p><strong>Status:</strong> ${bill.status}</p>
+          </div>
+
+          <div class="total">
+            <strong>Total Amount: ₹${bill.totalAmount}</strong>
+          </div>
+
+          <div class="footer">
+            <p>Thank you for choosing our costume rental service!</p>
+            <p>Please pay by the due date to avoid late fees.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  generateAllBillsPrintContent(bills: Bill[]): string {
+    const billsHtml = bills.map(bill => {
+      return `
+        <div class="bill-container" style="page-break-after: always;">
+          ${this.generateBillPrintContent(bill).match(/<div class="bill-container">[\s\S]*<\/div>\s*<\/body>/)?.[0]?.replace('<div class="bill-container">', '').replace('</body>', '') || ''}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>All Bills</title>
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            color: #333;
+            background: white;
+          }
+          .bill-container { 
+            max-width: 600px; 
+            margin: 0 auto 40px auto; 
+            padding: 20px;
+            border: 2px solid #007A8E;
+            border-radius: 8px;
+          }
+          .header { 
+            text-align: center; 
+            margin-bottom: 30px;
+            border-bottom: 3px solid #007A8E;
+            padding-bottom: 20px;
+          }
+          .header h1 { 
+            color: #007A8E; 
+            font-size: 28px;
+            margin: 0;
+          }
+          .header h2 { 
+            color: #016BD1; 
+            font-size: 20px;
+            margin: 5px 0;
+          }
+          .bill-info { 
+            margin-bottom: 20px; 
+            text-align: center;
+          }
+          .section { 
+            margin-bottom: 25px; 
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+          }
+          .section h3 { 
+            color: #007A8E; 
+            margin-top: 0;
+            border-bottom: 1px solid #007A8E;
+            padding-bottom: 5px;
+          }
+          .section p { 
+            margin: 8px 0; 
+            line-height: 1.4;
+          }
+          .total { 
+            font-size: 18px; 
+            font-weight: bold; 
+            color: #016BD1;
+            text-align: center;
+            padding: 15px;
+            background: #e8f4f8;
+            border-radius: 5px;
+            margin-top: 20px;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            font-size: 12px; 
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+          }
+          @media print {
+            body { margin: 0; }
+            .bill-container { 
+              border: none;
+              page-break-after: always;
+            }
+            .bill-container:last-child {
+              page-break-after: auto;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${bills.map(bill => this.generateBillPrintContent(bill).match(/<div class="bill-container">[\s\S]*?<\/div>/)?.[0] || '').join('')}
+      </body>
+      </html>
+    `;
+  }
+
+  generateCustomerBillsPrintContent(bills: Bill[]): string {
+    const billsHtml = bills.map(bill => {
+      return `
+        <div class="customer-bill-page" style="page-break-after: always;">
+          <div class="bill-container">
+            <div class="header">
+              <h1>Costume Rental Receipt</h1>
+              <h2>Bill #${bill.id}</h2>
+              <div class="business-info">
+                <p><strong>CostumeRental Pro</strong></p>
+                <p>Thank you for choosing our premium costume rental service!</p>
+              </div>
+            </div>
+            
+            <div class="bill-info">
+              <p><strong>Bill Date:</strong> ${new Date(bill.billDate).toLocaleDateString('en-IN')}</p>
+              <p><strong>Due Date:</strong> ${bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('en-IN') : 'Not set'}</p>
+            </div>
+
+            <div class="section">
+              <h3>Customer Information</h3>
+              <p><strong>Name:</strong> ${bill.rental.customer.firstName}</p>
+              <p><strong>Phone:</strong> ${bill.rental.customer.phone}</p>
+              ${bill.rental.customer.email ? `<p><strong>Email:</strong> ${bill.rental.customer.email}</p>` : ''}
+              ${bill.rental.customer.address ? `<p><strong>Address:</strong> ${bill.rental.customer.address}</p>` : ''}
+            </div>
+
+            <div class="section">
+              <h3>Rental Details</h3>
+              <p><strong>Costume:</strong> ${bill.rental.costume.name}</p>
+              <p><strong>Category:</strong> ${bill.rental.costume.category}</p>
+              <p><strong>Rental Date:</strong> ${new Date(bill.rental.rentalDate).toLocaleDateString('en-IN')}</p>
+              <p><strong>Expected Return Date:</strong> ${new Date(bill.rental.expectedReturnDate).toLocaleDateString('en-IN')}</p>
+              ${bill.rental.notes ? `<p><strong>Notes:</strong> ${bill.rental.notes}</p>` : ''}
+            </div>
+
+            <div class="section">
+              <h3>Payment Details</h3>
+              ${bill.lateFee && bill.lateFee > 0 ? `<p><strong>Late Fee:</strong> ₹${bill.lateFee}</p>` : ''}
+              ${bill.damageFee && bill.damageFee > 0 ? `<p><strong>Damage Fee:</strong> ₹${bill.damageFee}</p>` : ''}
+              ${bill.discount && bill.discount > 0 ? `<p><strong>Discount:</strong> -₹${bill.discount}</p>` : ''}
+              <p><strong>Status:</strong> ${bill.status}</p>
+            </div>
+
+            <div class="total">
+              <strong>Total Amount: ₹${bill.totalAmount}</strong>
+            </div>
+
+            <div class="customer-instructions">
+              <h3>Important Instructions</h3>
+              <ul>
+                <li>Please return the costume by the expected return date to avoid late fees</li>
+                <li>Any damage to the costume will incur additional charges</li>
+                <li>Keep this receipt for your records</li>
+                <li>Contact us if you need to extend the rental period</li>
+                <li>Late returns are subject to additional daily charges</li>
+              </ul>
+            </div>
+
+            <div class="footer">
+              <p><strong>Thank you for your business!</strong></p>
+              <p>We hope you enjoy your costume rental experience</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Customer Bills - CostumeRental Pro</title>
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+            color: #333;
+            background: white;
+          }
+          .customer-bill-page {
+            min-height: 100vh;
+            padding: 20px;
+          }
+          .bill-container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 30px;
+            border: 2px solid #007A8E;
+            border-radius: 10px;
+            background: white;
+          }
+          .header { 
+            text-align: center; 
+            margin-bottom: 30px;
+            border-bottom: 3px solid #007A8E;
+            padding-bottom: 20px;
+          }
+          .header h1 { 
+            color: #007A8E; 
+            font-size: 32px;
+            margin: 0 0 10px 0;
+          }
+          .header h2 { 
+            color: #016BD1; 
+            font-size: 24px;
+            margin: 0 0 15px 0;
+          }
+          .business-info {
+            margin-top: 15px;
+          }
+          .business-info p {
+            margin: 5px 0;
+            color: #666;
+          }
+          .bill-info { 
+            margin-bottom: 25px; 
+            text-align: center;
+            background: #f0f8ff;
+            padding: 15px;
+            border-radius: 8px;
+          }
+          .section { 
+            margin-bottom: 25px; 
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007A8E;
+          }
+          .section h3 { 
+            color: #007A8E; 
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #007A8E;
+            padding-bottom: 8px;
+            font-size: 18px;
+          }
+          .section p { 
+            margin: 10px 0; 
+            line-height: 1.6;
+            font-size: 14px;
+          }
+          .total { 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: #016BD1;
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #e8f4f8, #f0f8ff);
+            border-radius: 10px;
+            margin: 30px 0;
+            border: 2px solid #016BD1;
+          }
+          .customer-instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+          }
+          .customer-instructions h3 {
+            color: #856404;
+            margin-top: 0;
+            margin-bottom: 15px;
+          }
+          .customer-instructions ul {
+            margin: 0;
+            padding-left: 20px;
+          }
+          .customer-instructions li {
+            margin: 8px 0;
+            line-height: 1.5;
+            color: #856404;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 20px;
+            border-top: 2px solid #007A8E;
+            color: #007A8E;
+          }
+          .footer p {
+            margin: 8px 0;
+            font-size: 16px;
+          }
+          @media print {
+            body { margin: 0; padding: 0; }
+            .customer-bill-page { 
+              page-break-after: always;
+              min-height: auto;
+            }
+            .customer-bill-page:last-child {
+              page-break-after: auto;
+            }
+            .bill-container { 
+              border: 2px solid #007A8E;
+              box-shadow: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${billsHtml}
+      </body>
+      </html>
+    `;
+  }
+
+  closeBills() {
+    this.showBills = false;
+    this.createdBills = [];
+  }
+
+  // Rental Print Methods
+  closeRentalPrint() {
+    this.showRentalPrint = false;
+    this.createdRentals = [];
+  }
+
+
+
+
+
+
+
+  generateSingleRentalPrintContent(rental: Rental): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Rental Details - #${rental.id}</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            color: #333;
+            background: white;
+          }
+          .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            border-bottom: 3px solid #007A8E;
+            padding-bottom: 20px;
+          }
+          .company-name { 
+            color: #007A8E; 
+            font-size: 28px; 
+            font-weight: bold;
+            margin: 0 0 10px 0;
+          }
+          .rental-title { 
+            color: #016BD1; 
+            font-size: 20px;
+            margin: 10px 0;
+          }
+          .rental-container {
+            background: #f8f9fa;
+            border: 2px solid #007A8E;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+          }
+          .section { 
+            margin-bottom: 20px; 
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #00B2A9;
+          }
+          .section h3 { 
+            color: #007A8E; 
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+          }
+          .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+          }
+          .info-label {
+            font-weight: 600;
+            color: #555;
+          }
+          .info-value {
+            color: #333;
+          }
+          .status-active {
+            color: #2e7d32;
+            font-weight: bold;
+            background: #e8f5e8;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-size: 12px;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 20px;
+            border-top: 2px solid #007A8E;
+            color: #007A8E;
+          }
+          @media print {
+            body { margin: 0; padding: 15px; }
+            .rental-container { 
+              border: 2px solid #007A8E;
+              box-shadow: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1 class="company-name">Costume Rental System</h1>
+          <h2 class="rental-title">Rental Agreement - #${rental.id}</h2>
+          <p>Rental Date: ${this.formatDateForPrint(rental.rentalDate)}</p>
+        </div>
+        
+        <div class="rental-container">
+          <div class="section">
+            <h3>Customer Information</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Name:</span>
+                <span class="info-value">${rental.customer.firstName}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Phone:</span>
+                <span class="info-value">${rental.customer.phone}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Email:</span>
+                <span class="info-value">${rental.customer.email || 'N/A'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Address:</span>
+                <span class="info-value">${rental.customer.address || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Costume Details</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Costume Name:</span>
+                <span class="info-value">${rental.costume.name}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Category:</span>
+                <span class="info-value">${rental.costume.category}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Daily Price:</span>
+                <span class="info-value">₹${rental.costume.sellPrice}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Status:</span>
+                <span class="info-value status-active">${rental.status}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Rental Information</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Rental Date:</span>
+                <span class="info-value">${this.formatDateForPrint(rental.rentalDate)}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Expected Return:</span>
+                <span class="info-value">${this.formatDateForPrint(rental.expectedReturnDate)}</span>
+              </div>
+              ${rental.notes ? `
+              <div class="info-item" style="grid-column: 1 / -1;">
+                <span class="info-label">Notes:</span>
+                <span class="info-value">${rental.notes}</span>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p><strong>Thank you for choosing our costume rental service!</strong></p>
+          <p>Please return the costume in good condition by the expected return date.</p>
+          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  generateAllRentalsPrintContent(rentals: Rental[]): string {
+    const customer = rentals[0].customer;
+    const rentalsHtml = rentals.map(rental => `
+      <div class="rental-item">
+        <div class="rental-header">
+          <h3>Rental #${rental.id}</h3>
+          <span class="status-active">${rental.status}</span>
+        </div>
+        <div class="rental-details">
+          <div class="detail-row">
+            <span class="label">Costume:</span>
+            <span class="value">${rental.costume.name}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Category:</span>
+            <span class="value">${rental.costume.category}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Daily Price:</span>
+            <span class="value">₹${rental.costume.sellPrice}</span>
+          </div>
+          ${rental.notes ? `
+          <div class="detail-row">
+            <span class="label">Notes:</span>
+            <span class="value">${rental.notes}</span>
+          </div>
+          ` : ''}
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>All Rentals - ${customer.firstName}</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            color: #333;
+            background: white;
+          }
+          .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            border-bottom: 3px solid #007A8E;
+            padding-bottom: 20px;
+          }
+          .company-name { 
+            color: #007A8E; 
+            font-size: 28px; 
+            font-weight: bold;
+            margin: 0 0 10px 0;
+          }
+          .customer-section {
+            background: #f8f9fa;
+            border: 2px solid #007A8E;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+          }
+          .customer-section h3 {
+            color: #007A8E;
+            margin-top: 0;
+          }
+          .rental-item {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            page-break-inside: avoid;
+          }
+          .rental-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+          }
+          .rental-header h3 {
+            color: #007A8E;
+            margin: 0;
+          }
+          .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #f0f0f0;
+          }
+          .label {
+            font-weight: 600;
+            color: #555;
+          }
+          .value {
+            color: #333;
+          }
+          .status-active {
+            color: #2e7d32;
+            font-weight: bold;
+            background: #e8f5e8;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-size: 12px;
+          }
+          .summary {
+            background: #e8f4f8;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 20px;
+            border-top: 2px solid #007A8E;
+            color: #007A8E;
+          }
+          @media print {
+            body { margin: 0; padding: 15px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1 class="company-name">Costume Rental System</h1>
+          <h2>All Rental Agreements</h2>
+          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+        </div>
+        
+        <div class="customer-section">
+          <h3>Customer Information</h3>
+          <div class="detail-row">
+            <span class="label">Name:</span>
+            <span class="value">${customer.firstName}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Phone:</span>
+            <span class="value">${customer.phone}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Email:</span>
+            <span class="value">${customer.email || 'N/A'}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Address:</span>
+            <span class="value">${customer.address || 'N/A'}</span>
+          </div>
+        </div>
+
+        <div class="summary">
+          <h3>Rental Summary</h3>
+          <div class="detail-row">
+            <span class="label">Total Rentals:</span>
+            <span class="value">${rentals.length}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Rental Date:</span>
+            <span class="value">${this.formatDateForPrint(rentals[0].rentalDate)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Expected Return:</span>
+            <span class="value">${this.formatDateForPrint(rentals[0].expectedReturnDate)}</span>
+          </div>
+        </div>
+
+        <h3>Rental Details</h3>
+        ${rentalsHtml}
+
+        <div class="footer">
+          <p><strong>Thank you for choosing our costume rental service!</strong></p>
+          <p>Please return all costumes in good condition by the expected return date.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  generateRentalSummaryPrintContent(rentals: Rental[]): string {
+    const customer = rentals[0].customer;
+    const totalPrice = rentals.reduce((sum, rental) => sum + rental.costume.sellPrice, 0);
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Rental Summary - ${customer.firstName}</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            color: #333;
+            background: white;
+          }
+          .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            border-bottom: 3px solid #007A8E;
+            padding-bottom: 20px;
+          }
+          .company-name { 
+            color: #007A8E; 
+            font-size: 28px; 
+            font-weight: bold;
+            margin: 0 0 10px 0;
+          }
+          .summary-container {
+            background: #f8f9fa;
+            border: 2px solid #007A8E;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+          }
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+          }
+          .summary-table th,
+          .summary-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+          }
+          .summary-table th {
+            background: #007A8E;
+            color: white;
+            font-weight: 600;
+          }
+          .summary-table tr:nth-child(even) {
+            background: #f8f9fa;
+          }
+          .total-row {
+            background: #e8f4f8 !important;
+            font-weight: bold;
+            border-top: 2px solid #007A8E;
+          }
+          .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #00B2A9;
+          }
+          .section h3 {
+            color: #007A8E;
+            margin-top: 0;
+          }
+          .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+          }
+          .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 20px;
+            border-top: 2px solid #007A8E;
+            color: #007A8E;
+          }
+          @media print {
+            body { margin: 0; padding: 15px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1 class="company-name">Costume Rental System</h1>
+          <h2>Rental Summary</h2>
+          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+        </div>
+        
+        <div class="summary-container">
+          <div class="section">
+            <h3>Customer Information</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span>Name:</span>
+                <span>${customer.firstName}</span>
+              </div>
+              <div class="info-item">
+                <span>Phone:</span>
+                <span>${customer.phone}</span>
+              </div>
+              <div class="info-item">
+                <span>Email:</span>
+                <span>${customer.email || 'N/A'}</span>
+              </div>
+              <div class="info-item">
+                <span>Address:</span>
+                <span>${customer.address || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Rental Overview</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span>Total Items:</span>
+                <span>${rentals.length}</span>
+              </div>
+              <div class="info-item">
+                <span>Rental Date:</span>
+                <span>${this.formatDateForPrint(rentals[0].rentalDate)}</span>
+              </div>
+              <div class="info-item">
+                <span>Expected Return:</span>
+                <span>${this.formatDateForPrint(rentals[0].expectedReturnDate)}</span>
+              </div>
+              <div class="info-item">
+                <span>Total Daily Price:</span>
+                <span>₹${totalPrice}</span>
+              </div>
+            </div>
+          </div>
+
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Rental ID</th>
+                <th>Costume Name</th>
+                <th>Category</th>
+                <th>Daily Price</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rentals.map(rental => `
+                <tr>
+                  <td>#${rental.id}</td>
+                  <td>${rental.costume.name}</td>
+                  <td>${rental.costume.category}</td>
+                  <td>₹${rental.costume.sellPrice}</td>
+                  <td>${rental.status}</td>
+                </tr>
+              `).join('')}
+              <tr class="total-row">
+                <td colspan="3"><strong>Total Daily Price</strong></td>
+                <td><strong>₹${totalPrice}</strong></td>
+                <td><strong>${rentals.length} Items</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="footer">
+          <p><strong>Thank you for choosing our costume rental service!</strong></p>
+          <p>Please return all costumes in good condition by the expected return date.</p>
+        </div>
+      </body>
+      </html>
+    `;
   }
 
   returnCostume(rental: Rental) {
@@ -2069,10 +4269,9 @@ export class RentalsComponent implements OnInit {
 
   // Grouped view methods
   toggleView(isGrouped: boolean): void {
-    this.isGroupedView = isGrouped;
-    if (isGrouped) {
-      this.groupRentalsByCustomer();
-    }
+    // Always set to grouped view since individual view is removed
+    this.isGroupedView = true;
+    this.groupRentalsByCustomer();
   }
 
   groupRentalsByCustomer(): void {
@@ -2120,28 +4319,21 @@ export class RentalsComponent implements OnInit {
   }
 
   viewCustomerRentals(group: CustomerRentalGroup): void {
-    // Show a dialog with all rentals for this customer
-    const customerName = group.customer?.firstName || 'Unknown Customer';
-    const rentalsList = group.rentals.map(rental => 
-      `• ${rental.costume?.name || 'Unknown'} - ${rental.status} (${rental.rentalDate})`
-    ).join('\n');
-    
-    const details = `
-Customer: ${customerName}
-Phone: ${group.customer?.phone || 'N/A'}
-Email: ${group.customer?.email || 'N/A'}
-
-Rentals (${group.rentals.length}):
-${rentalsList}
-
-Summary:
-- Active: ${group.activeCount}
-- Returned: ${group.returnedCount} 
-- Cancelled: ${group.cancelledCount}
-- Total Amount: ₹${group.totalAmount.toFixed(2)}
-    `;
-    
-    alert(details);
+    // Open the new customer rentals dialog
+    const dialogRef = this.dialog.open(this.customerRentalsDialog, {
+      data: {
+        customer: group.customer,
+        rentals: group.rentals,
+        totalAmount: group.totalAmount,
+        activeCount: group.activeCount,
+        returnedCount: group.returnedCount,
+        cancelledCount: group.cancelledCount
+      },
+      width: '90%',
+      maxWidth: '1200px',
+      height: '80%',
+      panelClass: 'customer-rentals-dialog-panel'
+    });
   }
 
   expandCustomerGroup(group: CustomerRentalGroup): void {
@@ -2159,8 +4351,26 @@ Summary:
     this.selectedQuantity = 1;
     this.searchControl.setValue('');
     this.rentalForm.reset();
-    this.rentalForm.patchValue({ rentalDate: new Date() });
+    
+    // Set default values for all fields
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    this.rentalForm.patchValue({ 
+      firstName: '',
+      phone: '',
+      email: '',
+      address: '',
+      rentalDate: new Date(),
+      expectedReturnDate: tomorrow,
+      notes: '',
+      generateBillsImmediately: true
+    });
+    
     this.showAddForm = false;
+    // Reset rental print state
+    this.showRentalPrint = false;
+    this.createdRentals = [];
   }
 
   resetFormAndClose() {
@@ -2174,7 +4384,22 @@ Summary:
     this.selectedQuantity = 1;
     this.searchControl.setValue('');
     this.rentalForm.reset();
-    this.rentalForm.patchValue({ rentalDate: new Date() });
+    
+    // Set default values for all fields
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    this.rentalForm.patchValue({ 
+      firstName: '',
+      phone: '',
+      email: '',
+      address: '',
+      rentalDate: new Date(),
+      expectedReturnDate: tomorrow,
+      notes: '',
+      generateBillsImmediately: true
+    });
+    // Note: Don't reset rental print state here since we want to show created rentals
     
     // Force Angular change detection to update the UI immediately
     this.cdr.detectChanges();
@@ -2193,5 +4418,224 @@ Summary:
 
   private formatDate(date: Date): string {
     return date.toISOString().split('T')[0];
+  }
+
+  private formatDateForPrint(dateString: string): string {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  }
+
+  // Statistical methods for the summary section
+  getTotalActiveRentals(): number {
+    return this.rentals.filter(rental => rental.status === 'ACTIVE').length;
+  }
+
+  getTotalReturnedRentals(): number {
+    return this.rentals.filter(rental => rental.status === 'RETURNED').length;
+  }
+
+  getTotalOverdueRentals(): number {
+    const today = new Date();
+    return this.rentals.filter(rental => {
+      if (rental.status === 'ACTIVE') {
+        const expectedReturnDate = new Date(rental.expectedReturnDate);
+        return expectedReturnDate < today;
+      }
+      return rental.status === 'OVERDUE';
+    }).length;
+  }
+
+  getTotalRentalRevenue(): number {
+    return this.rentals.reduce((total, rental) => {
+      if (rental.costume?.sellPrice) {
+        const duration = this.getDurationInDays(rental);
+        return total + (rental.costume.sellPrice * duration);
+      }
+      return total;
+    }, 0);
+  }
+
+  // Wrapper function for created rentals print functionality
+  printRentalSummary(): void {
+    if (this.createdRentals.length === 0) return;
+    // Use the new print function with created rentals
+    this.printRentalSummaryForCustomer(this.createdRentals, this.createdRentals[0].customer);
+  }
+
+
+
+  printRentalSummaryForCustomer(rentals: Rental[], customer: Customer): void {
+    // Create minimal summary print content
+    const customerName = customer?.firstName || 'Unknown Customer';
+    const customerPhone = customer?.phone || 'N/A';
+    const customerEmail = customer?.email || 'N/A';
+    const customerAddress = customer?.address || 'N/A';
+    
+    let totalAmount = 0;
+    const rentalSummary = rentals.map((rental, index) => {
+      const dailyPrice = rental.costume?.sellPrice || 0;
+      totalAmount += dailyPrice;
+      
+      return `
+        <tr>
+          <td>Rental #${rental.id}</td>
+          <td>${rental.costume?.name || 'Unknown'}</td>
+          <td>${rental.costume?.category || 'N/A'}</td>
+          <td>${rental.costume?.size || 'N/A'}</td>
+          <td>₹${dailyPrice.toFixed(2)}</td>
+          <td>${rental.status}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Rental Summary - ${customerName}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+            font-size: 14px;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 20px;
+          }
+          .company-name {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+          }
+          .document-title {
+            font-size: 18px;
+            margin-bottom: 5px;
+          }
+          .print-date {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 20px;
+          }
+          .customer-section {
+            margin-bottom: 20px;
+          }
+          .customer-section h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+          }
+          .customer-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          .customer-table td {
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+          }
+          .customer-table td:first-child {
+            font-weight: bold;
+            background: #f8f9fa;
+            width: 120px;
+          }
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .summary-table th,
+          .summary-table td {
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
+          }
+          .summary-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+          }
+          .summary-table tr:nth-child(even) {
+            background: #f9f9f9;
+          }
+          .total-row {
+            background: #e8f4f8 !important;
+            font-weight: bold;
+          }
+          @media print {
+            body { margin: 10px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="company-name">Costume Rental Service</div>
+          <div class="document-title">Rental Summary</div>
+          <div class="print-date">Generated on: ${new Date().toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })}</div>
+        </div>
+
+        <div class="customer-section">
+          <h3>Customer Information</h3>
+          <table class="customer-table">
+            <tr>
+              <td>Customer Name:</td>
+              <td>${customerName}</td>
+            </tr>
+            <tr>
+              <td>Phone Number:</td>
+              <td>${customerPhone}</td>
+            </tr>
+            <tr>
+              <td>Email Address:</td>
+              <td>${customerEmail}</td>
+            </tr>
+            <tr>
+              <td>Address:</td>
+              <td>${customerAddress}</td>
+            </tr>
+          </table>
+        </div>
+
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th>Rental</th>
+              <th>Costume</th>
+              <th>Category</th>
+              <th>Size</th>
+              <th>Daily Price</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rentalSummary}
+            <tr class="total-row">
+              <td colspan="4"><strong>Total Rentals: ${rentals.length}</strong></td>
+              <td><strong>₹${totalAmount.toFixed(2)}</strong></td>
+              <td><strong>Total</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
   }
 }

@@ -32,7 +32,7 @@ public class RentalService {
     private BillingService billingService;
     
     public Rental createRental(Long customerId, Long costumeId, LocalDate rentalDate, 
-                              LocalDate expectedReturnDate, String notes) {
+                              LocalDate expectedReturnDate, String notes, Boolean generateBill) {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
         
@@ -57,7 +57,14 @@ public class RentalService {
         }
         costumeRepository.save(costume);
         
-        return rentalRepository.save(rental);
+        rental = rentalRepository.save(rental);
+        
+        // Generate bill for the rental only if requested
+        if (generateBill != null && generateBill) {
+            billingService.generateBill(rental);
+        }
+        
+        return rental;
     }
     
     public Rental returnCostume(Long rentalId, LocalDate actualReturnDate) {

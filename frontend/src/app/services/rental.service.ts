@@ -31,13 +31,14 @@ export class RentalService {
     return this.http.get<Rental[]>(`${this.apiUrl}/customer/${customerId}`);
   }
 
-  createRental(request: CreateRentalRequest): Observable<Rental> {
+  createRental(request: CreateRentalRequest, generateBill: boolean = true): Observable<Rental> {
     const params = new HttpParams()
       .set('customerId', request.customerId.toString())
       .set('costumeId', request.costumeId.toString())
       .set('rentalDate', request.rentalDate)
       .set('expectedReturnDate', request.expectedReturnDate)
-      .set('notes', request.notes || '');
+      .set('notes', request.notes || '')
+      .set('generateBill', generateBill.toString());
 
     return this.http.post<Rental>(this.apiUrl, null, { params });
   }
