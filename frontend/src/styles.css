@@ -1115,12 +1115,12 @@ p {
 /* Light Mode Enhanced Borders - Only applied when NOT in dark mode */
 :root:not([data-theme="dark"]) .table-container,
 :root:not([data-theme="dark"]) .modern-table {
-  border: 2px solid var(--gray-300);
+  border: 2px solid var(--gray-500);
 }
 
 :root:not([data-theme="dark"]) .modern-table th {
-  border-right: 1px solid var(--gray-300);
-  border-bottom: 2px solid var(--gray-300);
+  border-right: 1px solid var(--gray-500);
+  border-bottom: 2px solid var(--gray-500);
 }
 
 :root:not([data-theme="dark"]) .modern-table th:last-child {
@@ -1128,8 +1128,8 @@ p {
 }
 
 :root:not([data-theme="dark"]) .modern-table td {
-  border-right: 1px solid var(--gray-200);
-  border-bottom: 1px solid var(--gray-200);
+  border-right: 1px solid var(--gray-400);
+  border-bottom: 1px solid var(--gray-400);
 }
 
 :root:not([data-theme="dark"]) .modern-table td:last-child {
@@ -1142,12 +1142,12 @@ p {
 
 /* Material Design table borders for light mode only */
 :root:not([data-theme="dark"]) .mat-mdc-table {
-  border: 2px solid var(--gray-300);
+  border: 2px solid var(--gray-500);
 }
 
 :root:not([data-theme="dark"]) .mat-mdc-header-cell {
-  border-right: 1px solid var(--gray-300) !important;
-  border-bottom: 2px solid var(--gray-300) !important;
+  border-right: 1px solid var(--gray-500) !important;
+  border-bottom: 2px solid var(--gray-500) !important;
 }
 
 :root:not([data-theme="dark"]) .mat-mdc-header-cell:last-child {
@@ -1155,8 +1155,8 @@ p {
 }
 
 :root:not([data-theme="dark"]) .mat-mdc-cell {
-  border-right: 1px solid var(--gray-200) !important;
-  border-bottom: 1px solid var(--gray-200) !important;
+  border-right: 1px solid var(--gray-400) !important;
+  border-bottom: 1px solid var(--gray-400) !important;
 }
 
 :root:not([data-theme="dark"]) .mat-mdc-cell:last-child {
@@ -1169,28 +1169,28 @@ p {
 
 /* Enhanced section and container borders for light mode only */
 :root:not([data-theme="dark"]) .container {
-  border: 2px solid var(--gray-300);
+  border: 2px solid var(--gray-400);
 }
 
 :root:not([data-theme="dark"]) .modern-card {
-  border: 2px solid var(--gray-200);
-}
-
-:root:not([data-theme="dark"]) .form-container {
   border: 2px solid var(--gray-300);
 }
 
+:root:not([data-theme="dark"]) .form-container {
+  border: 2px solid var(--gray-400);
+}
+
 :root:not([data-theme="dark"]) .search-form {
-  border: 2px solid var(--gray-200);
+  border: 2px solid var(--gray-300);
 }
 
 :root:not([data-theme="dark"]) .loading-container {
-  border: 2px solid var(--gray-200);
+  border: 2px solid var(--gray-300);
 }
 
 /* Page header enhanced border for light mode only */
 :root:not([data-theme="dark"]) .page-header {
-  border-bottom: 2px solid var(--gray-300);
+  border-bottom: 2px solid var(--gray-400);
 }
 
 /* Additional UI elements borders for light mode */
@@ -1223,35 +1223,35 @@ p {
 
 /* Table row borders for better separation in light mode */
 :root:not([data-theme="dark"]) .modern-table tbody tr {
-  border-bottom: 1px solid var(--gray-200);
+  border-bottom: 1px solid var(--gray-400);
 }
 
 :root:not([data-theme="dark"]) .modern-table tbody tr:nth-child(even) {
   background-color: var(--gray-50);
-  border-top: 1px solid var(--gray-200);
-  border-bottom: 1px solid var(--gray-200);
+  border-top: 1px solid var(--gray-400);
+  border-bottom: 1px solid var(--gray-400);
 }
 
 /* Material table row striping with borders for light mode */
 :root:not([data-theme="dark"]) .mat-mdc-row:nth-child(even) {
   background-color: var(--gray-50);
-  border-top: 1px solid var(--gray-200) !important;
-  border-bottom: 1px solid var(--gray-200) !important;
+  border-top: 1px solid var(--gray-400) !important;
+  border-bottom: 1px solid var(--gray-400) !important;
 }
 
 /* Enhanced Search Components for Light Mode */
 :root:not([data-theme="dark"]) .search-form {
-  border: 2px solid var(--gray-300);
+  border: 2px solid var(--gray-400);
   background: linear-gradient(135deg, var(--background-primary), var(--gray-50));
 }
 
 :root:not([data-theme="dark"]) .search-field .mat-mdc-form-field {
-  border: 2px solid var(--gray-200);
+  border: 2px solid var(--gray-300);
   background: var(--background-primary);
 }
 
 :root:not([data-theme="dark"]) .search-field .mat-mdc-form-field:hover {
-  border-color: var(--gray-300);
+  border-color: var(--gray-400);
   box-shadow: 0 4px 12px rgba(0, 122, 142, 0.1);
 }
 
@@ -1261,7 +1261,7 @@ p {
 }
 
 :root:not([data-theme="dark"]) .search-section {
-  border: 2px solid var(--gray-200);
+  border: 2px solid var(--gray-300);
   background: linear-gradient(135deg, var(--background-secondary), var(--gray-50));
 }
 
@@ -1278,7 +1278,7 @@ p {
 }
 
 :root:not([data-theme="dark"]) .clear-btn {
-  border: 2px solid var(--gray-300) !important;
+  border: 2px solid var(--gray-400) !important;
   background: var(--background-primary) !important;
 }
 

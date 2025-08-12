@@ -987,11 +987,11 @@ export class BillsComponent implements OnInit {
           .summary { display: flex; justify-content: space-around; margin-bottom: 30px; background: #f5f5f5; padding: 20px; border-radius: 8px; }
           .summary-item { text-align: center; }
           .summary-value { font-size: 1.5em; font-weight: bold; color: #007A8E; }
-          .bills-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-          .bills-table th, .bills-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+              .bills-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+    .bills-table th, .bills-table td { border: 1px solid #64748b; padding: 10px; text-align: left; }
           .bills-table th { background-color: #007A8E; color: white; }
           .bills-table tr:nth-child(even) { background-color: #f9f9f9; }
-          .footer { margin-top: 30px; text-align: center; color: #666; border-top: 1px solid #ddd; padding-top: 20px; }
+          .footer { margin-top: 30px; text-align: center; color: #666; border-top: 1px solid #64748b; padding-top: 20px; }
         </style>
       </head>
       <body>

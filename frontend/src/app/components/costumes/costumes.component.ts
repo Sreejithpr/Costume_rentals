@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FormsModule } from '@angular/forms';
@@ -13,6 +13,8 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialogModule, MatDialog, MatDialogRef } from '@angular/material/dialog';
+
 
 import { CostumeService } from '../../services/costume.service';
 import { Costume } from '../../models/costume.model';
@@ -34,19 +36,16 @@ import { Costume } from '../../models/costume.model';
     MatChipsModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
-    MatTooltipModule
+    MatTooltipModule,
+    MatDialogModule
   ],
   template: `
     <div class="page-header">
       <h1 class="page-title">Costumes</h1>
       <div class="header-actions">
-        <button mat-raised-button color="primary" (click)="showAddForm = !showAddForm; showEditForm = false">
+        <button mat-raised-button color="primary" (click)="showAddForm = !showAddForm">
           <mat-icon>add</mat-icon>
           Add Costume
-        </button>
-        <button *ngIf="showEditForm" mat-stroked-button color="warn" (click)="cancelEdit()">
-          <mat-icon>cancel</mat-icon>
-          Cancel Edit
         </button>
       </div>
     </div>
@@ -129,76 +128,105 @@ import { Costume } from '../../models/costume.model';
       </mat-card-content>
     </mat-card>
 
-    <!-- Edit Costume Form -->
-    <mat-card *ngIf="showEditForm" class="form-container">
-      <mat-card-header>
-        <mat-card-title>Edit Costume</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <form [formGroup]="editCostumeForm" (ngSubmit)="updateCostume()">
-          <mat-form-field class="form-field">
-            <mat-label>Name</mat-label>
-            <input matInput formControlName="name" required>
-          </mat-form-field>
-          <mat-form-field class="form-field">
-            <mat-label>Description</mat-label>
-            <textarea matInput formControlName="description" rows="3"></textarea>
-          </mat-form-field>
-          <div class="form-row">
-            <mat-form-field class="form-field">
-              <mat-label>Category</mat-label>
-              <input matInput formControlName="category" required>
-            </mat-form-field>
-            <mat-form-field class="form-field">
-              <mat-label>Size</mat-label>
-              <mat-select formControlName="size" required>
-                <mat-option value="XS">XS</mat-option>
-                <mat-option value="S">S</mat-option>
-                <mat-option value="M">M</mat-option>
-                <mat-option value="L">L</mat-option>
-                <mat-option value="XL">XL</mat-option>
-                <mat-option value="XXL">XXL</mat-option>
-                <mat-option value="One Size">One Size</mat-option>
-              </mat-select>
-            </mat-form-field>
+    <!-- Edit Costume Dialog Template -->
+    <ng-template #editCostumeDialog let-data>
+      <div class="edit-costume-dialog">
+        <div mat-dialog-title class="dialog-header">
+          <div class="dialog-title-content">
+            <mat-icon class="dialog-icon">edit</mat-icon>
+            <h2>Edit Costume - {{ data.costume.name }}</h2>
+            <mat-chip [class]="data.costume.available ? 'status-available' : 'status-rented'" class="status-chip">
+              {{ data.costume.available ? 'Available' : 'Rented' }}
+            </mat-chip>
           </div>
-          <div class="form-row">
-            <mat-form-field class="form-field">
-              <mat-label>Sell Price</mat-label>
-              <input matInput type="number" step="0.01" formControlName="sellPrice" required>
-              <span matPrefix>₹</span>
-            </mat-form-field>
-            <mat-form-field class="form-field">
-              <mat-label>Original Price</mat-label>
-              <input matInput type="number" step="0.01" formControlName="originalPrice" required>
-              <span matPrefix>₹</span>
-            </mat-form-field>
-          </div>
-          <div class="form-row">
-            <mat-form-field class="form-field">
-              <mat-label>Stock Quantity</mat-label>
-              <input matInput type="number" formControlName="stockQuantity" required min="1">
-              <mat-hint>Number of units available</mat-hint>
-            </mat-form-field>
-          </div>
-          <div class="form-row">
-            <mat-form-field class="form-field">
-              <mat-label>Availability</mat-label>
-              <mat-select formControlName="available">
-                <mat-option [value]="true">Available</mat-option>
-                <mat-option [value]="false">Not Available</mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-          <div class="form-actions">
-            <button mat-raised-button color="primary" type="submit" [disabled]="!editCostumeForm.valid">
-              Update Costume
-            </button>
-            <button mat-button type="button" (click)="cancelEdit()">Cancel</button>
-          </div>
-        </form>
-      </mat-card-content>
-    </mat-card>
+          <button mat-icon-button mat-dialog-close class="close-button">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <mat-dialog-content class="dialog-content">
+          <form [formGroup]="editCostumeForm" (ngSubmit)="updateCostume()">
+            <div class="form-grid">
+              <mat-form-field class="form-field">
+                <mat-label>Name</mat-label>
+                <input matInput formControlName="name" required>
+                <mat-icon matSuffix>label</mat-icon>
+              </mat-form-field>
+              
+              <mat-form-field class="form-field full-width">
+                <mat-label>Description</mat-label>
+                <textarea matInput formControlName="description" rows="3" placeholder="Enter costume description"></textarea>
+                <mat-icon matSuffix>description</mat-icon>
+              </mat-form-field>
+
+              <mat-form-field class="form-field">
+                <mat-label>Category</mat-label>
+                <input matInput formControlName="category" required placeholder="e.g., Traditional, Modern, Fantasy">
+                <mat-icon matSuffix>category</mat-icon>
+              </mat-form-field>
+
+              <mat-form-field class="form-field">
+                <mat-label>Size</mat-label>
+                <mat-select formControlName="size" required>
+                  <mat-option value="XS">XS - Extra Small</mat-option>
+                  <mat-option value="S">S - Small</mat-option>
+                  <mat-option value="M">M - Medium</mat-option>
+                  <mat-option value="L">L - Large</mat-option>
+                  <mat-option value="XL">XL - Extra Large</mat-option>
+                  <mat-option value="XXL">XXL - Double Extra Large</mat-option>
+                  <mat-option value="One Size">One Size</mat-option>
+                </mat-select>
+                <mat-icon matSuffix>straighten</mat-icon>
+              </mat-form-field>
+
+              <mat-form-field class="form-field">
+                <mat-label>Sell Price</mat-label>
+                <input matInput type="number" step="0.01" formControlName="sellPrice" required>
+                <span matPrefix>₹</span>
+                <mat-icon matSuffix>payments</mat-icon>
+              </mat-form-field>
+
+              <mat-form-field class="form-field">
+                <mat-label>Original Price</mat-label>
+                <input matInput type="number" step="0.01" formControlName="originalPrice" required>
+                <span matPrefix>₹</span>
+                <mat-icon matSuffix>price_change</mat-icon>
+              </mat-form-field>
+
+              <mat-form-field class="form-field">
+                <mat-label>Stock Quantity</mat-label>
+                <input matInput type="number" formControlName="stockQuantity" required min="1">
+                <mat-hint>Number of units available</mat-hint>
+                <mat-icon matSuffix>inventory</mat-icon>
+              </mat-form-field>
+
+              <mat-form-field class="form-field">
+                <mat-label>Availability</mat-label>
+                <mat-select formControlName="available">
+                  <mat-option [value]="true">✅ Available</mat-option>
+                  <mat-option [value]="false">❌ Not Available</mat-option>
+                </mat-select>
+                <mat-icon matSuffix>toggle_on</mat-icon>
+              </mat-form-field>
+            </div>
+          </form>
+        </mat-dialog-content>
+
+        <mat-dialog-actions class="dialog-actions">
+          <button mat-stroked-button mat-dialog-close type="button" class="cancel-btn">
+            <mat-icon>close</mat-icon>
+            Cancel
+          </button>
+          <button mat-raised-button color="primary" 
+                  (click)="updateCostume()" 
+                  [disabled]="!editCostumeForm.valid"
+                  class="update-btn">
+            <mat-icon>save</mat-icon>
+            Update Costume
+          </button>
+        </mat-dialog-actions>
+      </div>
+    </ng-template>
 
     <!-- Costumes Table -->
     <div class="table-container">
@@ -266,15 +294,13 @@ import { Costume } from '../../models/costume.model';
               <td mat-cell *matCellDef="let costume">
                 <button mat-icon-button 
                         (click)="editCostume(costume)"
-                        matTooltip="Edit costume"
-                        [disabled]="editingCostume?.id === costume.id">
+                        matTooltip="Edit costume">
                   <mat-icon>edit</mat-icon>
                 </button>
                 <button mat-icon-button 
                         color="warn" 
                         (click)="deleteCostume(costume.id)"
-                        matTooltip="Delete costume"
-                        [disabled]="editingCostume?.id === costume.id">
+                        matTooltip="Delete costume">
                   <mat-icon>delete</mat-icon>
                 </button>
               </td>
@@ -377,6 +403,97 @@ import { Costume } from '../../models/costume.model';
       background-color: #f5f5f5;
     }
 
+    /* Edit Costume Dialog Styles */
+    .edit-costume-dialog {
+      min-width: 600px;
+    }
+
+    .dialog-header {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+      padding: var(--space-6);
+      margin: calc(-1 * var(--space-6));
+      margin-bottom: var(--space-6);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .dialog-title-content {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      flex: 1;
+    }
+
+    .dialog-title-content h2 {
+      margin: 0;
+      font-family: var(--font-editorial);
+      font-size: var(--font-size-h4);
+      font-weight: 700;
+      color: white;
+    }
+
+    .dialog-icon {
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+    }
+
+    .close-button {
+      color: white !important;
+    }
+
+    .dialog-content {
+      padding: var(--space-6);
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-5);
+      align-items: start;
+    }
+
+    .form-field {
+      width: 100%;
+    }
+
+    .form-field.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .dialog-actions {
+      padding: var(--space-6);
+      margin: calc(-1 * var(--space-6));
+      margin-top: var(--space-6);
+      background: var(--background-secondary);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-4);
+    }
+
+    .update-btn {
+      background: linear-gradient(135deg, var(--primary-color), var(--primary-dark)) !important;
+      color: white !important;
+    }
+
+    .cancel-btn {
+      color: var(--text-secondary) !important;
+      border-color: var(--border-color) !important;
+    }
+
+    .status-chip {
+      padding: var(--space-2) var(--space-4);
+      border-radius: var(--radius-xl);
+      font-size: var(--font-size-xs);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
     @media (max-width: 768px) {
       .page-header {
         flex-direction: column;
@@ -392,6 +509,37 @@ import { Costume } from '../../models/costume.model';
       .form-row {
         grid-template-columns: 1fr;
       }
+
+      .edit-costume-dialog {
+        min-width: auto;
+        width: 100%;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-4);
+      }
+
+      .dialog-header {
+        padding: var(--space-4);
+        margin: calc(-1 * var(--space-4));
+        margin-bottom: var(--space-4);
+      }
+
+      .dialog-title-content h2 {
+        font-size: var(--font-size-h5);
+      }
+
+      .dialog-content {
+        padding: var(--space-4);
+      }
+
+      .dialog-actions {
+        padding: var(--space-4);
+        margin: calc(-1 * var(--space-4));
+        margin-top: var(--space-4);
+        flex-direction: column;
+      }
     }
   `]
 })
@@ -400,7 +548,7 @@ export class CostumesComponent implements OnInit {
   filteredCostumes: Costume[] = [];
   loading = false;
   showAddForm = false;
-  showEditForm = false;
+
   showAvailableOnly = false;
   searchTerm = '';
   editingCostume: Costume | null = null;
@@ -408,10 +556,13 @@ export class CostumesComponent implements OnInit {
   costumeForm: FormGroup;
   editCostumeForm: FormGroup;
 
+  @ViewChild('editCostumeDialog') editCostumeDialog!: TemplateRef<any>;
+
   constructor(
     private costumeService: CostumeService,
     private fb: FormBuilder,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {
     this.costumeForm = this.fb.group({
       name: ['', Validators.required],
@@ -524,8 +675,24 @@ export class CostumesComponent implements OnInit {
       stockQuantity: costume.stockQuantity || 1,
       available: costume.available
     });
-    this.showEditForm = true;
-    this.showAddForm = false; // Close add form if open
+    this.openEditCostumeDialog(costume);
+  }
+
+  openEditCostumeDialog(costume: Costume): void {
+    const dialogRef = this.dialog.open(this.editCostumeDialog, {
+      width: '700px',
+      maxWidth: '90vw',
+      maxHeight: '90vh',
+      data: { costume: costume },
+      panelClass: 'edit-costume-panel'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result === 'updated') {
+        this.loadCostumes();
+      }
+      this.editingCostume = null;
+    });
   }
 
   updateCostume() {
@@ -538,16 +705,16 @@ export class CostumesComponent implements OnInit {
       
       this.costumeService.updateCostume(this.editingCostume.id!, updatedCostume).subscribe({
         next: (costume) => {
-          // Reload all data to ensure we have the latest information
+          // Close dialog and reload data
+          this.dialog.closeAll();
           this.loadCostumes();
-          this.cancelEdit();
           this.loading = false;
           this.snackBar.open('Costume updated successfully', 'Close', { duration: 3000 });
         },
         error: (error) => {
           console.error('Error updating costume:', error);
           this.loading = false;
-          this.cancelEdit(); // Close form even on error
+          this.dialog.closeAll(); // Close dialog even on error
           this.snackBar.open('Error updating costume', 'Close', { duration: 3000 });
         }
       });
@@ -555,7 +722,6 @@ export class CostumesComponent implements OnInit {
   }
 
   cancelEdit() {
-    this.showEditForm = false;
     this.editingCostume = null;
     this.editCostumeForm.reset();
     this.loading = false; // Ensure loading state is reset
@@ -583,7 +749,6 @@ export class CostumesComponent implements OnInit {
   cancelAdd() {
     this.showAddForm = false;
     this.costumeForm.reset();
-    this.showEditForm = false; // Also close edit form if open
     this.loading = false; // Ensure loading state is reset
   }
 }

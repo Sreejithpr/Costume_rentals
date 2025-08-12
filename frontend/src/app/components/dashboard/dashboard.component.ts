@@ -313,7 +313,7 @@ import { Bill } from '../../models/bill.model';
               <th mat-header-cell *matHeaderCellDef>Payment Status</th>
               <td mat-cell *matCellDef="let bill">
                 <div class="status-info-cell">
-                  <mat-chip [class]="'status-' + bill.status.toLowerCase()">{{ bill.status }}</mat-chip>
+                <mat-chip [class]="'status-' + bill.status.toLowerCase()">{{ bill.status }}</mat-chip>
                   <div class="payment-method" *ngIf="bill.paymentMethod">
                     💳 {{ bill.paymentMethod }}
                   </div>
@@ -335,8 +335,8 @@ import { Bill } from '../../models/bill.model';
               <td mat-cell *matCellDef="let bill">
                 <div class="action-buttons-cell">
                   <button mat-icon-button (click)="printBillFromDashboard(bill)" title="Print Bill" class="action-btn print">
-                    <mat-icon>print</mat-icon>
-                  </button>
+                  <mat-icon>print</mat-icon>
+                </button>
                   <button mat-icon-button (click)="viewBillDetails(bill)" title="View Details" class="action-btn view">
                     <mat-icon>visibility</mat-icon>
                   </button>

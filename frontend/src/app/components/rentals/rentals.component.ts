@@ -455,6 +455,11 @@ interface CustomerRentalGroup {
       <mat-card-header>
         <mat-card-title>Created Rentals - Ready for Print</mat-card-title>
         <div class="rental-print-actions">
+          <button mat-raised-button color="accent" (click)="returnAllRentals()" class="return-all-button" [disabled]="returningAll">
+            <mat-spinner diameter="16" *ngIf="returningAll"></mat-spinner>
+            <mat-icon *ngIf="!returningAll">assignment_return</mat-icon>
+            {{ returningAll ? 'Processing...' : 'Return All Items' }}
+          </button>
           <button mat-stroked-button (click)="printRentalSummary()" class="print-summary-button">
             <mat-icon>receipt</mat-icon>
             Print Summary
@@ -651,14 +656,25 @@ interface CustomerRentalGroup {
               <th mat-header-cell *matHeaderCellDef>Actions</th>
               <td mat-cell *matCellDef="let group" class="actions-cell">
                 <button mat-raised-button 
+                        color="accent" 
+                        *ngIf="group.activeCount > 0"
+                        (click)="returnAllCustomerRentals(group); $event.stopPropagation()"
+                        class="return-all-customer-btn"
+                        [disabled]="returningCustomerRentals === group.customer.id"
+                        matTooltip="Return all active rentals for this customer">
+                  <mat-spinner diameter="16" *ngIf="returningCustomerRentals === group.customer.id"></mat-spinner>
+                  <mat-icon *ngIf="returningCustomerRentals !== group.customer.id">assignment_return</mat-icon>
+                  {{ returningCustomerRentals === group.customer.id ? 'Processing...' : 'Return All' }}
+                </button>
+                <button mat-raised-button 
                         color="primary" 
-                        (click)="viewCustomerRentals(group)"
+                        (click)="viewCustomerRentals(group); $event.stopPropagation()"
                         class="view-details-btn">
                   <mat-icon>visibility</mat-icon>
                   View Details
                 </button>
                 <button mat-icon-button 
-                        (click)="expandCustomerGroup(group)"
+                        (click)="expandCustomerGroup(group); $event.stopPropagation()"
                         matTooltip="Expand/Collapse">
                   <mat-icon>expand_more</mat-icon>
                 </button>
@@ -1194,7 +1210,7 @@ interface CustomerRentalGroup {
 
     .costumes-table .mat-mdc-header-row,
     .selected-table .mat-mdc-header-row {
-      background-color: var(--background-tertiary);
+      background-color:rgb(96, 87, 158);
       height: 48px;
     }
 
@@ -1957,6 +1973,29 @@ interface CustomerRentalGroup {
       color: var(--primary-color);
     }
 
+    .return-all-customer-btn {
+      background: linear-gradient(135deg, var(--success-color), #4ade80) !important;
+      color: white !important;
+      border: none !important;
+      font-weight: 600 !important;
+      transition: all 0.3s ease !important;
+      box-shadow: 0 4px 12px rgba(45, 144, 39, 0.3) !important;
+      margin-right: var(--space-2) !important;
+    }
+
+    .return-all-customer-btn:hover:not([disabled]) {
+      background: linear-gradient(135deg, #1e7e34, var(--success-color)) !important;
+      transform: translateY(-2px) !important;
+      box-shadow: 0 6px 16px rgba(45, 144, 39, 0.4) !important;
+    }
+
+    .return-all-customer-btn[disabled] {
+      background: linear-gradient(135deg, #6c757d, #868e96) !important;
+      color: rgba(255, 255, 255, 0.7) !important;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
     .view-details-btn {
       margin-right: 8px;
     }
@@ -2131,6 +2170,28 @@ interface CustomerRentalGroup {
       background: #FDF958 !important;
       color: #007A8E !important;
       font-weight: 600;
+    }
+
+    .return-all-button {
+      background: linear-gradient(135deg, var(--success-color), #4ade80) !important;
+      color: white !important;
+      border: none !important;
+      font-weight: 600 !important;
+      transition: all 0.3s ease !important;
+      box-shadow: 0 4px 12px rgba(45, 144, 39, 0.3) !important;
+    }
+
+    .return-all-button:hover:not([disabled]) {
+      background: linear-gradient(135deg, #1e7e34, var(--success-color)) !important;
+      transform: translateY(-2px) !important;
+      box-shadow: 0 6px 16px rgba(45, 144, 39, 0.4) !important;
+    }
+
+    .return-all-button[disabled] {
+      background: linear-gradient(135deg, #6c757d, #868e96) !important;
+      color: rgba(255, 255, 255, 0.7) !important;
+      transform: none !important;
+      box-shadow: none !important;
     }
 
     .print-summary-button {
@@ -2606,6 +2667,18 @@ interface CustomerRentalGroup {
       .customer-rentals-table .mat-mdc-header-cell {
         padding: var(--space-2);
       }
+
+      .return-all-customer-btn {
+        font-size: var(--font-size-xs) !important;
+        padding: var(--space-2) var(--space-3) !important;
+        margin-bottom: var(--space-2) !important;
+      }
+
+      .actions-cell {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: var(--space-2) !important;
+      }
     }
   `]
 })
@@ -2654,6 +2727,8 @@ export class RentalsComponent implements OnInit {
   // Rental printing state
   createdRentals: Rental[] = [];
   showRentalPrint = false;
+  returningAll = false;
+  returningCustomerRentals: number | null = null;
 
   constructor(
     private rentalService: RentalService,
@@ -4170,6 +4245,197 @@ export class RentalsComponent implements OnInit {
     }
   }
 
+  returnAllRentals() {
+    if (!this.createdRentals || this.createdRentals.length === 0) {
+      this.snackBar.open('No rentals to return', 'Close', { duration: 3000 });
+      return;
+    }
+
+    const activeRentals = this.createdRentals.filter(rental => rental.status === 'ACTIVE');
+    
+    if (activeRentals.length === 0) {
+      this.snackBar.open('All rentals have already been returned or cancelled', 'Close', { duration: 3000 });
+      return;
+    }
+
+    const customerName = this.createdRentals[0].customer.firstName;
+    const confirmMessage = `Are you sure you want to return all ${activeRentals.length} rented items for ${customerName}?\n\nThis will mark all active rentals as returned with today's date.`;
+    
+    if (confirm(confirmMessage)) {
+      this.returningAll = true;
+      const actualReturnDate = new Date();
+      const returnRequest = {
+        actualReturnDate: this.formatDate(actualReturnDate)
+      };
+
+      let completedReturns = 0;
+      let totalToReturn = activeRentals.length;
+      const errors: string[] = [];
+
+      activeRentals.forEach((rental, index) => {
+        this.rentalService.returnCostume(rental.id!, returnRequest).subscribe({
+          next: (updatedRental) => {
+            completedReturns++;
+            
+            // Update the rental in the createdRentals array
+            const rentalIndex = this.createdRentals.findIndex(r => r.id === rental.id);
+            if (rentalIndex !== -1) {
+              this.createdRentals[rentalIndex] = updatedRental;
+            }
+
+            // Check if all returns are completed
+            if (completedReturns + errors.length === totalToReturn) {
+              this.handleBulkReturnCompletion(completedReturns, errors, customerName, actualReturnDate);
+            }
+          },
+          error: (error) => {
+            console.error(`Error returning costume "${rental.costume.name}":`, error);
+            errors.push(rental.costume.name);
+            
+            // Check if all returns are completed (including errors)
+            if (completedReturns + errors.length === totalToReturn) {
+              this.handleBulkReturnCompletion(completedReturns, errors, customerName, actualReturnDate);
+            }
+          }
+        });
+      });
+    }
+  }
+
+  private handleBulkReturnCompletion(completedReturns: number, errors: string[], customerName: string, returnDate: Date) {
+    this.returningAll = false;
+    
+    // Reload data to ensure consistency
+    this.loadRentals();
+    this.loadAvailableCostumes();
+
+    if (errors.length === 0) {
+      // All returns successful
+      this.snackBar.open(
+        `🎉 All ${completedReturns} items returned successfully for ${customerName} on ${this.formatDate(returnDate)}!`, 
+        'Close', 
+        { duration: 5000 }
+      );
+      
+      // Close the print dialog after successful bulk return
+      setTimeout(() => {
+        this.closeRentalPrint();
+      }, 1000);
+    } else if (completedReturns > 0) {
+      // Partial success
+      this.snackBar.open(
+        `✅ ${completedReturns} items returned successfully. ❌ ${errors.length} failed: ${errors.join(', ')}`, 
+        'Close', 
+        { duration: 7000 }
+      );
+    } else {
+      // All failed
+      this.snackBar.open(
+        `❌ Failed to return any items. Please try again or return items individually.`, 
+        'Close', 
+        { duration: 5000 }
+      );
+    }
+  }
+
+  returnAllCustomerRentals(group: CustomerRentalGroup) {
+    if (!group || !group.customer) {
+      this.snackBar.open('Customer information missing', 'Close', { duration: 3000 });
+      return;
+    }
+
+    const activeRentals = group.rentals.filter(rental => rental.status === 'ACTIVE');
+    
+    if (activeRentals.length === 0) {
+      this.snackBar.open('No active rentals found for this customer', 'Close', { duration: 3000 });
+      return;
+    }
+
+    const customerName = group.customer.firstName || 'Unknown Customer';
+    const confirmMessage = `Are you sure you want to return all ${activeRentals.length} active rental(s) for ${customerName}?\n\nThis will mark all active rentals as returned with today's date.`;
+    
+    if (confirm(confirmMessage)) {
+      this.returningCustomerRentals = group.customer.id || null;
+      const actualReturnDate = new Date();
+      const returnRequest = {
+        actualReturnDate: this.formatDate(actualReturnDate)
+      };
+
+      let completedReturns = 0;
+      let totalToReturn = activeRentals.length;
+      const errors: string[] = [];
+
+      activeRentals.forEach((rental) => {
+        this.rentalService.returnCostume(rental.id!, returnRequest).subscribe({
+          next: (updatedRental) => {
+            completedReturns++;
+            
+            // Update the rental in the group
+            const rentalIndex = group.rentals.findIndex(r => r.id === rental.id);
+            if (rentalIndex !== -1) {
+              group.rentals[rentalIndex] = updatedRental;
+            }
+
+            // Check if all returns are completed
+            if (completedReturns + errors.length === totalToReturn) {
+              this.handleCustomerBulkReturnCompletion(completedReturns, errors, customerName, actualReturnDate, group);
+            }
+          },
+          error: (error) => {
+            console.error(`Error returning costume "${rental.costume.name}" for ${customerName}:`, error);
+            errors.push(rental.costume.name);
+            
+            // Check if all returns are completed (including errors)
+            if (completedReturns + errors.length === totalToReturn) {
+              this.handleCustomerBulkReturnCompletion(completedReturns, errors, customerName, actualReturnDate, group);
+            }
+          }
+        });
+      });
+    }
+  }
+
+  private handleCustomerBulkReturnCompletion(
+    completedReturns: number, 
+    errors: string[], 
+    customerName: string, 
+    returnDate: Date,
+    group: CustomerRentalGroup
+  ) {
+    this.returningCustomerRentals = null;
+    
+    // Update group counts
+    group.activeCount = Math.max(0, group.activeCount - completedReturns);
+    group.returnedCount += completedReturns;
+    
+    // Reload data to ensure consistency
+    this.loadRentals();
+    this.loadAvailableCostumes();
+
+    if (errors.length === 0) {
+      // All returns successful
+      this.snackBar.open(
+        `🎉 All ${completedReturns} items returned successfully for ${customerName} on ${this.formatDate(returnDate)}!`, 
+        'Close', 
+        { duration: 5000 }
+      );
+    } else if (completedReturns > 0) {
+      // Partial success
+      this.snackBar.open(
+        `✅ ${completedReturns} items returned successfully for ${customerName}. ❌ ${errors.length} failed: ${errors.join(', ')}`, 
+        'Close', 
+        { duration: 7000 }
+      );
+    } else {
+      // All failed
+      this.snackBar.open(
+        `❌ Failed to return any items for ${customerName}. Please try again or return items individually.`, 
+        'Close', 
+        { duration: 5000 }
+      );
+    }
+  }
+
   // Method to get the display status (including computed overdue status)
   getDisplayStatus(rental: Rental): string {
     if (rental.status === 'ACTIVE') {
@@ -4461,14 +4727,47 @@ export class RentalsComponent implements OnInit {
 
   // Wrapper function for created rentals print functionality
   printRentalSummary(): void {
-    if (this.createdRentals.length === 0) return;
-    // Use the new print function with created rentals
-    this.printRentalSummaryForCustomer(this.createdRentals, this.createdRentals[0].customer);
+    console.log('printRentalSummary called');
+    console.log('createdRentals:', this.createdRentals);
+    
+    if (!this.createdRentals || this.createdRentals.length === 0) {
+      console.error('No created rentals found for printing');
+      this.snackBar.open('No rentals available for printing', 'Close', { duration: 3000 });
+      return;
+    }
+    
+    if (!this.createdRentals[0].customer) {
+      console.error('Customer information missing from first rental');
+      this.snackBar.open('Customer information missing. Cannot print summary.', 'Close', { duration: 3000 });
+      return;
+    }
+    
+    try {
+      // Use the new print function with created rentals
+      this.printRentalSummaryForCustomer(this.createdRentals, this.createdRentals[0].customer);
+    } catch (error) {
+      console.error('Error printing rental summary:', error);
+      this.snackBar.open('Error printing summary. Please try again.', 'Close', { duration: 3000 });
+    }
   }
 
 
 
   printRentalSummaryForCustomer(rentals: Rental[], customer: Customer): void {
+    console.log('printRentalSummaryForCustomer called with:', { rentals, customer });
+    
+    if (!rentals || rentals.length === 0) {
+      console.error('No rentals provided for printing');
+      this.snackBar.open('No rentals data available for printing', 'Close', { duration: 3000 });
+      return;
+    }
+    
+    if (!customer) {
+      console.error('No customer provided for printing');
+      this.snackBar.open('Customer information missing for printing', 'Close', { duration: 3000 });
+      return;
+    }
+    
     // Create minimal summary print content
     const customerName = customer?.firstName || 'Unknown Customer';
     const customerPhone = customer?.phone || 'N/A';
@@ -4630,12 +4929,34 @@ export class RentalsComponent implements OnInit {
       </html>
     `;
 
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+    try {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        
+        // Immediately trigger print dialog without delay
+        printWindow.print();
+        
+        // Close the window after printing
+        printWindow.addEventListener('afterprint', () => {
+          printWindow.close();
+        });
+        
+        // Fallback: close window after a delay if afterprint doesn't fire
+        setTimeout(() => {
+          if (!printWindow.closed) {
+            printWindow.close();
+          }
+        }, 1000);
+      } else {
+        // Popup was blocked
+        console.error('Print window was blocked by popup blocker');
+        this.snackBar.open('Popup blocked! Please allow popups for this site to print the summary.', 'Close', { duration: 5000 });
+      }
+    } catch (error) {
+      console.error('Error opening print window:', error);
+      this.snackBar.open('Error opening print window. Please check your browser settings.', 'Close', { duration: 5000 });
     }
   }
 }
